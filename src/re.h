@@ -21,6 +21,8 @@
 #include <gnuregex.h>
 #elif defined(HAVE_POSIX_REGEX)
 #include <regex.h>
+#elif defined(HAVE_NO_REGEX)
+// do nothing
 #else
 #error No regular expression backend was found!
 #endif
@@ -50,8 +52,6 @@ class Regex {
   std::regex re_;
 #elif defined(HAVE_POSIX_REGEX) || defined(HAVE_GNU_POSIX_REGEX)
   regex_t re_;
-#else
-# error No regular expression backend implementation available
 #endif
 };
 

@@ -9,15 +9,8 @@ elseif(HAVE_GNU_POSIX_REGEX)
 elseif(HAVE_POSIX_REGEX)
   set(RE_FILES "re_posix.cc")
 else()
-  message(FATAL_ERROR "Failed to determine the source files for the regular expression backend")
+  set(RE_FILES "")
 endif()
-
-# Build a regular expression library
-add_library(benchmark_re ${RE_FILES})
-set_target_properties(benchmark_re PROPERTIES
-  VERSION ${GENERIC_LIB_VERSION}
-  SOVERSION ${GENERIC_LIB_SOVERSION}
-)
 
 # Build the benchmark library
 add_library(benchmark ${SOURCE_FILES} ${RE_FILES})
