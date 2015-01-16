@@ -695,7 +695,68 @@ struct State::SharedState {
   DISALLOW_COPY_AND_ASSIGN(SharedState)
 };
 
+struct State::PIMPLThread {
+    PIMPLThread() {}
+    std::thread thread_;
+
+    DISALLOW_COPY_AND_ASSIGN(PIMPLThread)
+};
+
 namespace internal {
+
+MinimalBenchmark::MinimalBenchmark(const char* name, void(*f)(State&))
+    : imp_(new Benchmark(name, f)) {}
+
+MinimalBenchmark::~MinimalBenchmark() {
+  delete imp_;
+}
+
+MinimalBenchmark* MinimalBenchmark::Arg(int x) {
+  imp_->Arg(x);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::Range(int start, int limit) {
+  imp_->Range(start, limit);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::DenseRange(int start, int limit) {
+  imp_->DenseRange(start, limit);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::ArgPair(int x, int y) {
+  imp_->ArgPair(x, y);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::RangePair(int lo1, int hi1, int lo2, int hi2) {
+  imp_->RangePair(lo1, hi1, lo2, hi2);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::Apply(void (*custom_arguments)(Benchmark* benchmark)) {
+  imp_->Apply(custom_arguments);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::Threads(int t) {
+  imp_->Threads(t);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::ThreadRange(int min_threads, int max_threads) {
+  imp_->ThreadRange(min_threads, max_threads);
+  return this;
+}
+
+MinimalBenchmark* MinimalBenchmark::ThreadPerCpu() {
+  imp_->ThreadPerCpu();
+  return this;
+}
+
+
 
 Benchmark::Benchmark(const char* name, BenchmarkFunction f)
     : name_(name), function_(f) {
@@ -939,6 +1000,7 @@ State::State(FastClock* clock, SharedState* s, int t)
       state_(STATE_INITIAL),
       clock_(clock),
       shared_(s),
+      thread_ptr_(new PIMPLThread()),
       iterations_(0),
       start_cpu_(0.0),
       start_time_(0.0),
@@ -955,6 +1017,11 @@ State::State(FastClock* clock, SharedState* s, int t)
       stats_(new ThreadStats()) {
   CHECK(clock != nullptr);
   CHECK(s != nullptr);
+}
+
+State::~State(){
+    delete thread_ptr_;
+    delete stats_;
 }
 
 bool State::KeepRunning() {
@@ -1030,7 +1097,7 @@ void State::SetItemsProcessed(int64_t items) {
   stats_->items_processed = items;
 }
 
-void State::SetLabel(const std::string& label) {
+void State::SetLabel(const char* label) {
   CHECK_EQ(STATE_STOPPED, state_);
   std::lock_guard<std::mutex> l(shared_->mu);
   shared_->label = label;
@@ -1192,12 +1259,12 @@ void State::Run() {
 }
 
 void State::RunAsThread() {
-  thread_ = std::thread(State::RunWrapper, this);
+  thread_ptr_->thread_ = std::thread(State::RunWrapper, this);
 }
 
 void State::Wait() {
-  if (thread_.joinable()) {
-    thread_.join();
+  if (thread_ptr_->thread_.joinable()) {
+    thread_ptr_->thread_.join();
   }
 }
 
