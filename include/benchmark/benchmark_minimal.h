@@ -368,24 +368,12 @@ class Benchmark {
 
   // Used inside the benchmark implementation
   struct Instance;
-  // Measure the overhead of an empty benchmark to subtract later.
-  static void MeasureOverhead();
-  
  private:
   friend class BenchmarkFamilies;
-  friend class BenchmarkImp;
   friend class ::benchmark::State;
-  friend struct ::benchmark::internal::Benchmark::Instance;
+  
                                                             
   BenchmarkImp * imp_;
-
-  // Special value placed in thread_counts_ to stand for NumCPUs()
-  static const int kNumCpuMarker = -1;
-
-  // Special value used to indicate that no range is required.
-  static const int kNoRange = -1;
-
-  static double MeasurePeakHeapMemory(const Instance& b);
 
   DISALLOW_COPY_AND_ASSIGN(Benchmark)
 };

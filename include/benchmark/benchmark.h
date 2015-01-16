@@ -102,16 +102,23 @@ public:
   void Threads(int t);
   void ThreadRange(int min_threads, int max_threads);
   void ThreadPerCpu();
+    
+  // Special value placed in thread_counts_ to stand for NumCPUs()
+  static const int kNumCpuMarker = -1;
+  
+  // Special value used to indicate that no range is required.
+  static const int kNoRange = -1;
   
   static void AddRange(std::vector<int>* dst, int lo, int hi, int mult);
-
+  static void MeasureOverhead();
+  static double MeasurePeakHeapMemory(const Benchmark::Instance& b);
 private:
   friend class BenchmarkFamilies;
   friend class ::benchmark::internal::Benchmark;
   friend class ::benchmark::State;
   friend struct ::benchmark::internal::Benchmark::Instance;
   friend void RunMatchingBenchmarks(const std::string&, const BenchmarkReporter*);
-  
+
   std::vector<Benchmark::Instance> CreateBenchmarkInstances(
     Benchmark* from_bench, int rangeXindex, int rangeYindex);
   

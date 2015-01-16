@@ -389,13 +389,13 @@ void BenchmarkFamilies::FindBenchmarks(
     std::vector<Benchmark::Instance> instances;
     if (family->imp_->rangeX_.empty() && family->imp_->rangeY_.empty()) {
       instances = family->imp_->CreateBenchmarkInstances(
-        family, Benchmark::kNoRange, Benchmark::kNoRange);
+        family, BenchmarkImp::kNoRange, BenchmarkImp::kNoRange);
       std::copy(instances.begin(), instances.end(),
                 std::back_inserter(*benchmarks));
     } else if (family->imp_->rangeY_.empty()) {
       for (size_t x = 0; x < family->imp_->rangeX_.size(); ++x) {
         instances = family->imp_->CreateBenchmarkInstances(
-            family, x, Benchmark::kNoRange);
+            family, x, BenchmarkImp::kNoRange);
         std::copy(instances.begin(), instances.end(),
                   std::back_inserter(*benchmarks));
       }
@@ -656,9 +656,9 @@ struct Benchmark::Instance {
       : bm(nullptr),
         threads(1),
         rangeXset(false),
-        rangeX(kNoRange),
+        rangeX(BenchmarkImp::kNoRange),
         rangeYset(false),
-        rangeY(kNoRange) {}
+        rangeY(BenchmarkImp::kNoRange) {}
 
   std::string name;
   Benchmark* bm;
@@ -804,12 +804,12 @@ std::vector<Benchmark::Instance> BenchmarkImp::CreateBenchmarkInstances(
     instance.bm = from_bench;
     instance.threads = num_threads;
 
-    if (rangeXindex != Benchmark::kNoRange) {
+    if (rangeXindex != BenchmarkImp::kNoRange) {
       instance.rangeX = rangeX_[rangeXindex];
       instance.rangeXset = true;
       AppendHumanReadable(instance.rangeX, &instance.name);
     }
-    if (rangeYindex != Benchmark::kNoRange) {
+    if (rangeYindex != BenchmarkImp::kNoRange) {
       instance.rangeY = rangeY_[rangeYindex];
       instance.rangeYset = true;
       AppendHumanReadable(instance.rangeY, &instance.name);
@@ -880,11 +880,25 @@ void BenchmarkImp::RunInstance(const Benchmark::Instance& b, const BenchmarkRepo
     report.report_label = state.label;
     report.bytes_per_second = state.stats.bytes_processed / seconds;
     report.items_per_second = state.stats.items_processed / seconds;
-    report.max_heapbytes_used = Benchmark::MeasurePeakHeapMemory(b);
+    report.max_heapbytes_used = BenchmarkImp::MeasurePeakHeapMemory(b);
   }
 
   br->ReportRuns(state.runs);
 }
+
+void BenchmarkImp::MeasureOverhead() {
+  State::FastClock clock(State::FastClock::CPU_TIME);
+  State::SharedState state(nullptr);
+  State runner(&clock, &state, 0);
+  while (runner.KeepRunning()) {
+  }
+  overhead = state.runs[0].real_accumulated_time /
+             static_cast<double>(state.runs[0].iterations);
+#ifdef DEBUG
+  std::cout << "Per-iteration overhead for doing nothing: " << overhead << "\n";
+#endif
+}
+
 
 
 Benchmark::Benchmark(const char* name, void(*f)(State&))
@@ -943,23 +957,9 @@ Benchmark* Benchmark::ThreadPerCpu() {
   return this;
 }
 
-
-void Benchmark::MeasureOverhead() {
-  State::FastClock clock(State::FastClock::CPU_TIME);
-  State::SharedState state(nullptr);
-  State runner(&clock, &state, 0);
-  while (runner.KeepRunning()) {
-  }
-  overhead = state.runs[0].real_accumulated_time /
-             static_cast<double>(state.runs[0].iterations);
-#ifdef DEBUG
-  std::cout << "Per-iteration overhead for doing nothing: " << overhead << "\n";
-#endif
-}
-
 // Run the specified benchmark, measure its peak memory usage, and
 // return the peak memory usage.
-double Benchmark::MeasurePeakHeapMemory(const Instance&) {
+double BenchmarkImp::MeasurePeakHeapMemory(const Benchmark::Instance&) {
   if (!get_memory_usage) return 0.0;
   double bytes = 0.0;
   /*  TODO(dominich)
@@ -1343,7 +1343,7 @@ void RunSpecifiedBenchmarks(const BenchmarkReporter* reporter /*= nullptr*/) {
 void Initialize(int* argc, const char** argv) {
   walltime::Initialize();
   internal::ParseCommandLineFlags(argc, argv);
-  internal::Benchmark::MeasureOverhead();
+  internal::BenchmarkImp::MeasureOverhead();
 }
 
 }  // end namespace benchmark
