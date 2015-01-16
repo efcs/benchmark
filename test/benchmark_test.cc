@@ -1,5 +1,4 @@
 #include "benchmark/benchmark.h"
-#include "../src/benchmark_internal.h"
 
 #include <assert.h>
 #include <math.h>
@@ -64,7 +63,7 @@ static void BM_CalculatePiRange(benchmark::State& state) {
     pi = CalculatePi(state.range_x());
   std::stringstream ss;
   ss << pi;
-  state.SetLabel(ss.str());
+  state.SetLabel(ss.str().c_str());
 }
 BENCHMARK_RANGE(BM_CalculatePiRange, 1, 1024 * 1024);
 
