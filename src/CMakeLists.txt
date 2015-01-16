@@ -13,7 +13,7 @@ else()
 endif()
 
 # Build the benchmark library
-add_library(benchmark ${SOURCE_FILES} ${RE_FILES})
+add_library(benchmark SHARED ${SOURCE_FILES} ${RE_FILES})
 set_target_properties(benchmark PROPERTIES
   VERSION ${GENERIC_LIB_VERSION}
   SOVERSION ${GENERIC_LIB_SOVERSION}
