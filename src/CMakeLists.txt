@@ -19,6 +19,7 @@ set_target_properties(benchmark PROPERTIES
   VERSION "1.0"
   SOVERSION "1"
 )
+target_link_libraries(benchmark pthread)
 
 # Install target (will install the library to specified CMAKE_INSTALL_PREFIX variable)
 install(
