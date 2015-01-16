@@ -529,9 +529,7 @@ void PrintUsageAndExit() {
   fprintf(stdout,
           "benchmark"
 #ifndef HAVE_NO_REGEX
-          " [--benchmark_filter=<regex>]\n"
-#else
-          "         "
+          " [--benchmark_filter=<regex>]\n" "         "
 #endif
           " [--benchmark_iterations=<iterations>]\n"
           "          [--benchmark_min_time=<min_time>]\n"
