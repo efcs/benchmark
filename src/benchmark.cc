@@ -379,30 +379,29 @@ void BenchmarkFamilies::FindBenchmarks(
     if (family == nullptr) continue;  // Family was deleted
 
     // Match against filter.
-    if (!re.Match(family->imp_->name_)) {
+    if (!re.Match(family->name_)) {
 #ifdef DEBUG
-      std::cout << "Skipping " << family->imp_->name_ << "\n";
+      std::cout << "Skipping " << family->name_ << "\n";
 #endif
       continue;
     }
 
     std::vector<Benchmark::Instance> instances;
-    if (family->imp_->rangeX_.empty() && family->imp_->rangeY_.empty()) {
-      instances = family->imp_->CreateBenchmarkInstances(
-        family, BenchmarkImp::kNoRange, BenchmarkImp::kNoRange);
+    if (family->rangeX_.empty() && family->rangeY_.empty()) {
+      instances = family->CreateBenchmarkInstances(
+        Benchmark::kNoRange, Benchmark::kNoRange);
       std::copy(instances.begin(), instances.end(),
                 std::back_inserter(*benchmarks));
-    } else if (family->imp_->rangeY_.empty()) {
-      for (size_t x = 0; x < family->imp_->rangeX_.size(); ++x) {
-        instances = family->imp_->CreateBenchmarkInstances(
-            family, x, BenchmarkImp::kNoRange);
+    } else if (family->rangeY_.empty()) {
+      for (size_t x = 0; x < family->rangeX_.size(); ++x) {
+        instances = family->CreateBenchmarkInstances(x, Benchmark::kNoRange);
         std::copy(instances.begin(), instances.end(),
                   std::back_inserter(*benchmarks));
       }
     } else {
-      for (size_t x = 0; x < family->imp_->rangeX_.size(); ++x) {
-        for (size_t y = 0; y < family->imp_->rangeY_.size(); ++y) {
-          instances = family->imp_->CreateBenchmarkInstances(family, x, y);
+      for (size_t x = 0; x < family->rangeX_.size(); ++x) {
+        for (size_t y = 0; y < family->rangeY_.size(); ++y) {
+          instances = family->CreateBenchmarkInstances(x, y);
           std::copy(instances.begin(), instances.end(),
                     std::back_inserter(*benchmarks));
         }
@@ -656,9 +655,9 @@ struct Benchmark::Instance {
       : bm(nullptr),
         threads(1),
         rangeXset(false),
-        rangeX(BenchmarkImp::kNoRange),
+        rangeX(kNoRange),
         rangeYset(false),
-        rangeY(BenchmarkImp::kNoRange) {}
+        rangeY(kNoRange) {}
 
   std::string name;
   Benchmark* bm;
@@ -669,7 +668,7 @@ struct Benchmark::Instance {
   bool rangeYset;
   int rangeY;
 
-  bool multithreaded() const { return !bm->imp_->thread_counts_.empty(); }
+  bool multithreaded() const { return !bm->thread_counts_.empty(); }
 };
 
 }  // end namespace internal
@@ -696,48 +695,48 @@ struct State::SharedState {
   DISALLOW_COPY_AND_ASSIGN(SharedState)
 };
 
-struct State::InternalState {
-    InternalState() : stats_(new ThreadStats()) {}
-    std::thread thread_;
-    std::string label_;
-    std::unique_ptr<ThreadStats> stats_;
-};
-
 namespace internal {
 
-
-void BenchmarkImp::Arg(int x) {
-  std::lock_guard<std::mutex> l(mutex_);
-  rangeX_.push_back(x);
+Benchmark::Benchmark(const char* name, BenchmarkFunction f)
+    : name_(name), function_(f) {
+  registration_index_ = BenchmarkFamilies::GetInstance()->AddBenchmark(this);
 }
 
-void BenchmarkImp::Range(int start, int limit) {
+Benchmark::~Benchmark() {
+  BenchmarkFamilies::GetInstance()->RemoveBenchmark(registration_index_);
+}
+
+Benchmark* Benchmark::Arg(int x) {
+  std::lock_guard<std::mutex> l(mutex_);
+  rangeX_.push_back(x);
+  return this;
+}
+
+Benchmark* Benchmark::Range(int start, int limit) {
   std::vector<int> arglist;
   AddRange(&arglist, start, limit, kRangeMultiplier);
 
   std::lock_guard<std::mutex> l(mutex_);
-  for (size_t i = 0; i < arglist.size(); ++i) {
-    rangeX_.push_back(arglist[i]);
-  }
+  for (size_t i = 0; i < arglist.size(); ++i) rangeX_.push_back(arglist[i]);
+  return this;
 }
 
-void BenchmarkImp::DenseRange(int start, int limit) {
+Benchmark* Benchmark::DenseRange(int start, int limit) {
   CHECK_GE(start, 0);
   CHECK_LE(start, limit);
   std::lock_guard<std::mutex> l(mutex_);
-  for (int arg = start; arg <= limit; ++arg) {
-    rangeX_.push_back(arg);
-  }
+  for (int arg = start; arg <= limit; ++arg) rangeX_.push_back(arg);
+  return this;
 }
 
-void BenchmarkImp::ArgPair(int x, int y) {
+Benchmark* Benchmark::ArgPair(int x, int y) {
   std::lock_guard<std::mutex> l(mutex_);
   rangeX_.push_back(x);
   rangeY_.push_back(y);
+  return this;
 }
 
-
-void BenchmarkImp::RangePair(int lo1, int hi1, int lo2, int hi2) {
+Benchmark* Benchmark::RangePair(int lo1, int hi1, int lo2, int hi2) {
   std::vector<int> arglist1, arglist2;
   AddRange(&arglist1, lo1, hi1, kRangeMultiplier);
   AddRange(&arglist2, lo2, hi2, kRangeMultiplier);
@@ -747,29 +746,37 @@ void BenchmarkImp::RangePair(int lo1, int hi1, int lo2, int hi2) {
   std::copy(arglist1.begin(), arglist1.end(), rangeX_.begin());
   rangeY_.resize(arglist2.size());
   std::copy(arglist2.begin(), arglist2.end(), rangeY_.begin());
+  return this;
 }
 
+Benchmark* Benchmark::Apply(void (*custom_arguments)(Benchmark* benchmark)) {
+  custom_arguments(this);
+  return this;
+}
 
-void BenchmarkImp::Threads(int t) {
+Benchmark* Benchmark::Threads(int t) {
   CHECK_GT(t, 0);
   std::lock_guard<std::mutex> l(mutex_);
   thread_counts_.push_back(t);
+  return this;
 }
 
-void BenchmarkImp::ThreadRange(int min_threads, int max_threads) {
+Benchmark* Benchmark::ThreadRange(int min_threads, int max_threads) {
   CHECK_GT(min_threads, 0);
   CHECK_GE(max_threads, min_threads);
 
   std::lock_guard<std::mutex> l(mutex_);
   AddRange(&thread_counts_, min_threads, max_threads, 2);
+  return this;
 }
 
-void BenchmarkImp::ThreadPerCpu() {
+Benchmark* Benchmark::ThreadPerCpu() {
   std::lock_guard<std::mutex> l(mutex_);
   thread_counts_.push_back(NumCPUs());
+  return this;
 }
 
-void BenchmarkImp::AddRange(std::vector<int>* dst, int lo, int hi, int mult) {
+void Benchmark::AddRange(std::vector<int>* dst, int lo, int hi, int mult) {
   CHECK_GE(lo, 0);
   CHECK_GE(hi, lo);
 
@@ -786,9 +793,8 @@ void BenchmarkImp::AddRange(std::vector<int>* dst, int lo, int hi, int mult) {
   if (hi != lo) dst->push_back(hi);
 }
 
-
-std::vector<Benchmark::Instance> BenchmarkImp::CreateBenchmarkInstances(
-  Benchmark* from_bench, int rangeXindex, int rangeYindex) {
+std::vector<Benchmark::Instance> Benchmark::CreateBenchmarkInstances(
+    int rangeXindex, int rangeYindex) {
   // Special list of thread counts to use when none are specified
   std::vector<int> one_thread;
   one_thread.push_back(1);
@@ -799,17 +805,17 @@ std::vector<Benchmark::Instance> BenchmarkImp::CreateBenchmarkInstances(
   const std::vector<int>& thread_counts =
       (is_multithreaded ? thread_counts_ : one_thread);
   for (int num_threads : thread_counts) {
-    Benchmark::Instance instance;
+    Instance instance;
     instance.name = name_;
-    instance.bm = from_bench;
+    instance.bm = this;
     instance.threads = num_threads;
 
-    if (rangeXindex != BenchmarkImp::kNoRange) {
+    if (rangeXindex != kNoRange) {
       instance.rangeX = rangeX_[rangeXindex];
       instance.rangeXset = true;
       AppendHumanReadable(instance.rangeX, &instance.name);
     }
-    if (rangeYindex != BenchmarkImp::kNoRange) {
+    if (rangeYindex != kNoRange) {
       instance.rangeY = rangeY_[rangeYindex];
       instance.rangeYset = true;
       AppendHumanReadable(instance.rangeY, &instance.name);
@@ -828,8 +834,20 @@ std::vector<Benchmark::Instance> BenchmarkImp::CreateBenchmarkInstances(
   return instances;
 }
 
+void Benchmark::MeasureOverhead() {
+  State::FastClock clock(State::FastClock::CPU_TIME);
+  State::SharedState state(nullptr);
+  State runner(&clock, &state, 0);
+  while (runner.KeepRunning()) {
+  }
+  overhead = state.runs[0].real_accumulated_time /
+             static_cast<double>(state.runs[0].iterations);
+#ifdef DEBUG
+  std::cout << "Per-iteration overhead for doing nothing: " << overhead << "\n";
+#endif
+}
 
-void BenchmarkImp::RunInstance(const Benchmark::Instance& b, const BenchmarkReporter* br) {
+void Benchmark::RunInstance(const Instance& b, const BenchmarkReporter* br) {
   use_real_time = false;
   running_benchmark = true;
   // get_memory_usage = FLAGS_gbenchmark_memory_usage;
@@ -880,86 +898,15 @@ void BenchmarkImp::RunInstance(const Benchmark::Instance& b, const BenchmarkRepo
     report.report_label = state.label;
     report.bytes_per_second = state.stats.bytes_processed / seconds;
     report.items_per_second = state.stats.items_processed / seconds;
-    report.max_heapbytes_used = BenchmarkImp::MeasurePeakHeapMemory(b);
+    report.max_heapbytes_used = MeasurePeakHeapMemory(b);
   }
 
   br->ReportRuns(state.runs);
 }
 
-void BenchmarkImp::MeasureOverhead() {
-  State::FastClock clock(State::FastClock::CPU_TIME);
-  State::SharedState state(nullptr);
-  State runner(&clock, &state, 0);
-  while (runner.KeepRunning()) {
-  }
-  overhead = state.runs[0].real_accumulated_time /
-             static_cast<double>(state.runs[0].iterations);
-#ifdef DEBUG
-  std::cout << "Per-iteration overhead for doing nothing: " << overhead << "\n";
-#endif
-}
-
-
-
-Benchmark::Benchmark(const char* name, void(*f)(State&))
-    : imp_(new BenchmarkImp(name, f))
-{
-  imp_->registration_index_ = BenchmarkFamilies::GetInstance()->AddBenchmark(this);
-}
-
-Benchmark::~Benchmark() {
-  BenchmarkFamilies::GetInstance()->RemoveBenchmark(imp_->registration_index_);
-  delete imp_;
-}
-
-Benchmark* Benchmark::Arg(int x) {
-  imp_->Arg(x);
-  return this;
-}
-
-Benchmark* Benchmark::Range(int start, int limit) {
-    imp_->Range(start, limit);
-    return this;
-}
-
-Benchmark* Benchmark::DenseRange(int start, int limit) {
-    imp_->DenseRange(start, limit);
-    return this;
-}
-
-Benchmark* Benchmark::ArgPair(int x, int y) {
-  imp_->ArgPair(x, y);
-  return this;
-}
-
-Benchmark* Benchmark::RangePair(int lo1, int hi1, int lo2, int hi2) {
-  imp_->RangePair(lo1, hi1, lo2, hi2);
-  return this;
-}
-
-Benchmark* Benchmark::Apply(void (*custom_arguments)(Benchmark* benchmark)) {
-  custom_arguments(this);
-  return this;
-}
-
-Benchmark* Benchmark::Threads(int t) {
-  imp_->Threads(t);
-  return this;
-}
-
-Benchmark* Benchmark::ThreadRange(int min_threads, int max_threads) {
-  imp_->ThreadRange(min_threads, max_threads);
-  return this;
-}
-
-Benchmark* Benchmark::ThreadPerCpu() {
-  imp_->ThreadPerCpu();
-  return this;
-}
-
 // Run the specified benchmark, measure its peak memory usage, and
 // return the peak memory usage.
-double BenchmarkImp::MeasurePeakHeapMemory(const Benchmark::Instance&) {
+double Benchmark::MeasurePeakHeapMemory(const Instance&) {
   if (!get_memory_usage) return 0.0;
   double bytes = 0.0;
   /*  TODO(dominich)
@@ -992,7 +939,6 @@ State::State(FastClock* clock, SharedState* s, int t)
       state_(STATE_INITIAL),
       clock_(clock),
       shared_(s),
-      internal_(new InternalState()),
       iterations_(0),
       start_cpu_(0.0),
       start_time_(0.0),
@@ -1005,14 +951,10 @@ State::State(FastClock* clock, SharedState* s, int t)
       interval_micros_(static_cast<int64_t>(kNumMicrosPerSecond *
                                             FLAGS_benchmark_min_time /
                                             FLAGS_benchmark_repetitions)),
-      is_continuation_(false) {
+      is_continuation_(false),
+      stats_(new ThreadStats()) {
   CHECK(clock != nullptr);
   CHECK(s != nullptr);
-}
-
-State::~State()
-{
-    delete internal_;
 }
 
 bool State::KeepRunning() {
@@ -1079,16 +1021,16 @@ void State::ResumeTiming() {
 void State::SetBytesProcessed(int64_t bytes) {
   CHECK_EQ(STATE_STOPPED, state_);
   std::lock_guard<std::mutex> l(shared_->mu);
-  internal_->stats_->bytes_processed = bytes;
+  stats_->bytes_processed = bytes;
 }
 
 void State::SetItemsProcessed(int64_t items) {
   CHECK_EQ(STATE_STOPPED, state_);
   std::lock_guard<std::mutex> l(shared_->mu);
-  internal_->stats_->items_processed = items;
+  stats_->items_processed = items;
 }
 
-void State::SetLabel(const char* label) {
+void State::SetLabel(const std::string& label) {
   CHECK_EQ(STATE_STOPPED, state_);
   std::lock_guard<std::mutex> l(shared_->mu);
   shared_->label = label;
@@ -1241,21 +1183,21 @@ bool State::MaybeStop() {
 }
 
 void State::Run() {
-  internal_->stats_->Reset();
-  shared_->instance->bm->imp_->function_(*this);
+  stats_->Reset();
+  shared_->instance->bm->function_(*this);
   {
     std::lock_guard<std::mutex> l(shared_->mu);
-    shared_->stats.Add(*(internal_->stats_));
+    shared_->stats.Add(*stats_);
   }
 }
 
 void State::RunAsThread() {
-  internal_->thread_ = std::thread(State::RunWrapper, this);
+  thread_ = std::thread(State::RunWrapper, this);
 }
 
 void State::Wait() {
-  if (internal_->thread_.joinable()) {
-    internal_->thread_.join();
+  if (thread_.joinable()) {
+    thread_.join();
   }
 }
 
@@ -1316,7 +1258,7 @@ void RunMatchingBenchmarks(const std::string& spec,
 
   if (reporter->ReportContext(context))
     for (internal::Benchmark::Instance& benchmark : benchmarks)
-      BenchmarkImp::RunInstance(benchmark, reporter);
+      Benchmark::RunInstance(benchmark, reporter);
 }
 
 void FindMatchingBenchmarkNames(const std::string& spec,
@@ -1343,7 +1285,7 @@ void RunSpecifiedBenchmarks(const BenchmarkReporter* reporter /*= nullptr*/) {
 void Initialize(int* argc, const char** argv) {
   walltime::Initialize();
   internal::ParseCommandLineFlags(argc, argv);
-  internal::BenchmarkImp::MeasureOverhead();
+  internal::Benchmark::MeasureOverhead();
 }
 
 }  // end namespace benchmark
