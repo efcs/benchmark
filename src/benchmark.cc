@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "benchmark/benchmark.h"
+#include "benchmark_internal.h"
 #include "check.h"
 #include "colorprint.h"
 #include "commandlineflags.h"
@@ -695,6 +696,12 @@ struct State::SharedState {
   DISALLOW_COPY_AND_ASSIGN(SharedState)
 };
 
+struct State::InternalState {
+    std::thread thread_;
+    std::string label_;
+    std::unique_ptr<ThreadStats> stats_;
+};
+
 namespace internal {
 
 Benchmark::Benchmark(const char* name, BenchmarkFunction f)
@@ -939,6 +946,7 @@ State::State(FastClock* clock, SharedState* s, int t)
       state_(STATE_INITIAL),
       clock_(clock),
       shared_(s),
+      internal_(new InternalState()),
       iterations_(0),
       start_cpu_(0.0),
       start_time_(0.0),
@@ -951,10 +959,14 @@ State::State(FastClock* clock, SharedState* s, int t)
       interval_micros_(static_cast<int64_t>(kNumMicrosPerSecond *
                                             FLAGS_benchmark_min_time /
                                             FLAGS_benchmark_repetitions)),
-      is_continuation_(false),
-      stats_(new ThreadStats()) {
+      is_continuation_(false) {
   CHECK(clock != nullptr);
   CHECK(s != nullptr);
+}
+
+State::~State()
+{
+    delete internal_;
 }
 
 bool State::KeepRunning() {
@@ -1021,13 +1033,13 @@ void State::ResumeTiming() {
 void State::SetBytesProcessed(int64_t bytes) {
   CHECK_EQ(STATE_STOPPED, state_);
   std::lock_guard<std::mutex> l(shared_->mu);
-  stats_->bytes_processed = bytes;
+  internal_->stats_->bytes_processed = bytes;
 }
 
 void State::SetItemsProcessed(int64_t items) {
   CHECK_EQ(STATE_STOPPED, state_);
   std::lock_guard<std::mutex> l(shared_->mu);
-  stats_->items_processed = items;
+  internal_->stats_->items_processed = items;
 }
 
 void State::SetLabel(const std::string& label) {
@@ -1183,21 +1195,21 @@ bool State::MaybeStop() {
 }
 
 void State::Run() {
-  stats_->Reset();
+  internal_->stats_->Reset();
   shared_->instance->bm->function_(*this);
   {
     std::lock_guard<std::mutex> l(shared_->mu);
-    shared_->stats.Add(*stats_);
+    shared_->stats.Add(*(internal_->stats_));
   }
 }
 
 void State::RunAsThread() {
-  thread_ = std::thread(State::RunWrapper, this);
+  internal_->thread_ = std::thread(State::RunWrapper, this);
 }
 
 void State::Wait() {
-  if (thread_.joinable()) {
-    thread_.join();
+  if (internal_->thread_.joinable()) {
+    internal_->thread_.join();
   }
 }
 

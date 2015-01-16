@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 2.8)
 project (benchmark)
 
+option(BENCHMARK_ENABLE_TESTING "Enable testing of the benchmark library." ON)
+
 # Make sure we can import out CMake functions
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -69,4 +71,24 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # Build the targets
+enable_testing()
 add_subdirectory(src)
+
+if (BENCHMARK_ENABLE_TESTING)
+  # Import and build Google Test
+  include(ExternalProject)
+  set_directory_properties(properties EP_PREFIX "${CMAKE_BINARY_DIR}/third_party")
+  ExternalProject_Add(googletest
+    URL "https://googletest.googlecode.com/files/gtest-1.7.0.zip"
+    URL_MD5 2d6ec8ccdf5c46b05ba54a9fd1d130d7
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/third_party/gtest"
+    CMAKE_ARGS "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+    INSTALL_COMMAND "")
+  ExternalProject_Get_Property(googletest source_dir)
+  include_directories(${source_dir}/include)
+  ExternalProject_Get_Property(googletest binary_dir)
+  link_directories(${binary_dir})
+
+  
+  add_subdirectory(test)
+endif()

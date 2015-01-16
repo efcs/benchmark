@@ -1,4 +1,5 @@
 #include "benchmark/benchmark.h"
+#include "../src/benchmark_internal.h"
 
 #include <assert.h>
 #include <math.h>
