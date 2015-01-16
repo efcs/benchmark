@@ -137,7 +137,6 @@ BENCHMARK(BM_MultiThreaded)->Threads(4);
 
 #include <stdint.h>
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -295,14 +294,13 @@ class State {
 
   friend class internal::Benchmark;
   DISALLOW_COPY_AND_ASSIGN(State)
-  State(State &&) = delete;
-  State & operator=(State &&) = delete;
 };
 
 
 namespace internal {
 
-typedef std::function<void(State&)> BenchmarkFunction;
+class BenchmarkImp;
+
 
 // Run all benchmarks whose name is a partial match for the regular
 // expression in "spec". The results of benchmark runs are fed to "reporter".
@@ -314,6 +312,7 @@ void RunMatchingBenchmarks(const std::string& spec,
 void FindMatchingBenchmarkNames(const std::string& re,
                                 std::vector<std::string>* benchmark_names);
 
+
 // ------------------------------------------------------
 // Benchmark registration object.  The BENCHMARK() macro expands
 // into an internal::Benchmark* object.  Various methods can
@@ -323,7 +322,7 @@ void FindMatchingBenchmarkNames(const std::string& re,
 class Benchmark {
  public:
   // The Benchmark takes ownership of the Callback pointed to by f.
-  Benchmark(const char* name, BenchmarkFunction f);
+  Benchmark(const char* name, void(*)(State&));
 
   ~Benchmark();
 
@@ -390,7 +389,6 @@ class Benchmark {
 
   // Used inside the benchmark implementation
   struct Instance;
-
   // Measure the overhead of an empty benchmark to subtract later.
   static void MeasureOverhead();
 
@@ -399,14 +397,8 @@ class Benchmark {
 
   std::vector<Benchmark::Instance> CreateBenchmarkInstances(int rangeXindex,
                                                             int rangeYindex);
-
-  std::string name_;
-  BenchmarkFunction function_;
-  int registration_index_;
-  std::vector<int> rangeX_;
-  std::vector<int> rangeY_;
-  std::vector<int> thread_counts_;
-  std::mutex mutex_;
+                                                            
+  BenchmarkImp * imp_;
 
   // Special value placed in thread_counts_ to stand for NumCPUs()
   static const int kNumCpuMarker = -1;

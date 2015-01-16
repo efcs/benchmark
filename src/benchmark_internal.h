@@ -3,6 +3,8 @@
 
 #include "benchmark/benchmark.h"
 #include <string>
+#include <functional>
+
 
 namespace benchmark {
 
@@ -66,6 +68,37 @@ class BenchmarkReporter {
 };
 
 namespace internal {
+
+
+typedef std::function<void(State&)> BenchmarkFunction;
+
+// Run all benchmarks whose name is a partial match for the regular
+// expression in "spec". The results of benchmark runs are fed to "reporter".
+void RunMatchingBenchmarks(const std::string& spec,
+                           const BenchmarkReporter* reporter);
+
+// Extract the list of benchmark names that match the specified regular
+// expression.
+void FindMatchingBenchmarkNames(const std::string& re,
+                                std::vector<std::string>* benchmark_names);
+
+                                
+class BenchmarkImp
+{
+public:
+    BenchmarkImp(const char* name, BenchmarkFunction f)
+        : name_(name), function_(f)
+    {}
+    
+    std::string name_;
+    BenchmarkFunction function_;
+    int registration_index_;
+    std::vector<int> rangeX_;
+    std::vector<int> rangeY_;
+    std::vector<int> thread_counts_;
+    std::mutex mutex_;
+};
+
 
 // ------------------------------------------------------
 // Internal implementation details follow; please ignore
