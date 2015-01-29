@@ -90,6 +90,6 @@ include_directories(${PROJECT_SOURCE_DIR}/src)
 
 add_subdirectory(src)
 if (BENCHMARK_ENABLE_TESTING)
-enable_testing()
-add_subdirectory(test)
+  enable_testing()
+  add_subdirectory(test)
 endif()

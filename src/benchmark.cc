@@ -515,8 +515,6 @@ void MemoryUsage() {
 }
 */
 
-void UseRealTime() { use_real_time = true; }
-
 void PrintUsageAndExit() {
   fprintf(stdout,
           "benchmark [--benchmark_filter=<regex>]\n"
@@ -553,6 +551,10 @@ void ParseCommandLineFlags(int* argc, const char** argv) {
 }
 
 }  // end namespace internal
+
+
+void UseRealTime() { use_real_time = true; }
+
 
 // A clock that provides a fast mechanism to check if we're nearly done.
 class State::FastClock {
