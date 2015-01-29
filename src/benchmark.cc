@@ -44,6 +44,12 @@ DEFINE_int32(benchmark_iterations, 0,
              "Total number of iterations per benchmark. 0 means the benchmarks "
              "are time-based.");
 
+DEFINE_int32(benchmark_min_iters, 100,
+             "Minimum number of iterations per benchmark");
+
+DEFINE_int32(benchmark_max_iters, 1000000000,
+             "Maximum number of iterations per benchmark");
+
 DEFINE_double(benchmark_min_time, 0.5,
               "Minimum number of seconds we should run benchmark before "
               "results are considered significant.  For cpu-time based "
@@ -518,13 +524,13 @@ void MemoryUsage() {
 }
 */
 
-void UseRealTime() { use_real_time = true; }
-
 void PrintUsageAndExit() {
   fprintf(stdout,
           "benchmark"
-          " [--benchmark_filter=<regex>]\n" "         "
-          " [--benchmark_iterations=<iterations>]\n"
+          " [--benchmark_filter=<regex>]\n"
+          "          [--benchmark_iterations=<iterations>]\n"
+          "          [--benchmark_min_iters=<iterations>]\n"
+          "          [--benchmark_max_iters=<iterations>]\n"
           "          [--benchmark_min_time=<min_time>]\n"
           //"          [--benchmark_memory_usage]\n"
           "          [--benchmark_repetitions=<num_repetitions>]\n"
@@ -540,6 +546,10 @@ void ParseCommandLineFlags(int* argc, const char** argv) {
         ParseStringFlag(argv[i], "benchmark_filter", &FLAGS_benchmark_filter) ||
         ParseInt32Flag(argv[i], "benchmark_iterations",
                        &FLAGS_benchmark_iterations) ||
+        ParseInt32Flag(argv[i], "benchmark_min_iters",
+                       &FLAGS_benchmark_min_iters) ||
+        ParseInt32Flag(argv[i], "benchmark_max_iters",
+                       &FLAGS_benchmark_max_iters) ||
         ParseDoubleFlag(argv[i], "benchmark_min_time",
                         &FLAGS_benchmark_min_time) ||
         // TODO(dominic)
@@ -555,12 +565,20 @@ void ParseCommandLineFlags(int* argc, const char** argv) {
 
       --(*argc);
       --i;
-    } else if (IsFlag(argv[i], "help"))
+    } else if (IsFlag(argv[i], "help")) {
       PrintUsageAndExit();
+    } else {
+        std::cerr << "Unrecognized option: " << argv[i] << "\n";
+        PrintUsageAndExit();
+    }
   }
 }
 
 }  // end namespace internal
+
+
+void UseRealTime() { use_real_time = true; }
+
 
 // A clock that provides a fast mechanism to check if we're nearly done.
 class State::FastClock {
