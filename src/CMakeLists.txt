@@ -20,7 +20,8 @@ set_target_properties(benchmark_re PROPERTIES
 )
 
 # Build the benchmark library
-add_library(benchmark ${SOURCE_FILES} ${RE_FILES})
+add_library(benchmark SHARED ${SOURCE_FILES} ${RE_FILES})
+target_link_libraries(benchmark "-lpthread")
 set_target_properties(benchmark PROPERTIES
   VERSION ${GENERIC_LIB_VERSION}
   SOVERSION ${GENERIC_LIB_SOVERSION}
