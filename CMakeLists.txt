@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 2.8)
 project (benchmark)
 
+option(BENCHMARK_ENABLE_TESTING "Turn on testing." OFF)
+
 # Make sure we can import out CMake functions
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -86,6 +88,9 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # Build the targets
-enable_testing()
+
 add_subdirectory(src)
+if (BENCHMARK_ENABLE_TESTING)
+enable_testing()
 add_subdirectory(test)
+endif()
