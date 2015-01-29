@@ -903,7 +903,7 @@ std::vector<Benchmark::Instance> Benchmark::CreateBenchmarkInstances(
   return instances;
 }
 
-void Benchmark::MeasureOverhead() {
+void MeasureOverhead() {
   State::FastClock clock(State::FastClock::CPU_TIME);
   State::SharedState state(nullptr);
   State runner(&clock, &state, 0);
@@ -911,9 +911,7 @@ void Benchmark::MeasureOverhead() {
   }
   overhead = state.runs[0].real_accumulated_time /
              static_cast<double>(state.runs[0].iterations);
-#ifdef DEBUG
   std::cout << "Per-iteration overhead for doing nothing: " << overhead << "\n";
-#endif
 }
 
 void Benchmark::RunInstance(const Instance& b, const BenchmarkReporter* br) {
@@ -1360,7 +1358,7 @@ void RunSpecifiedBenchmarks(const BenchmarkReporter* reporter /*= nullptr*/) {
 void Initialize(int* argc, const char** argv) {
   walltime::Initialize();
   internal::ParseCommandLineFlags(argc, argv);
-  internal::Benchmark::MeasureOverhead();
+  internal::MeasureOverhead();
 }
 
 }  // end namespace benchmark

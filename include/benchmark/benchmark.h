@@ -298,9 +298,6 @@ class Benchmark {
   // Used inside the benchmark implementation
   struct Instance;
 
-  // Measure the overhead of an empty benchmark to subtract later.
-  static void MeasureOverhead();
-
  private:
   friend class BenchmarkFamilies;
 

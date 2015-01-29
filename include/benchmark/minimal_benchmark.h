@@ -34,6 +34,7 @@ void UseRealTime();
 namespace internal {
 class Benchmark;
 class BenchmarkFamilies;
+void MeasureOverhead();
 }
 
 // State is passed to a running Benchmark and contains state for the
@@ -150,6 +151,7 @@ class State {
   ThreadStats* stats_;
 
   friend class internal::Benchmark;
+  friend void internal::MeasureOverhead();
   DISALLOW_COPY_AND_ASSIGN(State)
 };
 
