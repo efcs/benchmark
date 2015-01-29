@@ -1128,8 +1128,8 @@ bool State::FinishInterval() {
 
   const double accumulated_time = walltime::Now() - start_time_;
   const double total_overhead = overhead * iterations_;
-  CHECK_LT(pause_real_time_, accumulated_time);
-  CHECK_LT(pause_real_time_ + total_overhead, accumulated_time);
+  //CHECK_LT(pause_real_time_, accumulated_time);
+  //CHECK_LT(pause_real_time_ + total_overhead, accumulated_time);
   data.real_accumulated_time =
       accumulated_time - (pause_real_time_ + total_overhead);
   data.cpu_accumulated_time = (MyCPUUsage() + ChildrenCPUUsage()) -
