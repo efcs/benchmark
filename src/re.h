@@ -21,8 +21,6 @@
 #include <gnuregex.h>
 #elif defined(HAVE_POSIX_REGEX)
 #include <regex.h>
-#elif defined(HAVE_NO_REGEX)
-// do nothing
 #else
 #error No regular expression backend was found!
 #endif

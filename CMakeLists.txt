@@ -2,7 +2,6 @@ cmake_minimum_required (VERSION 2.8)
 project (benchmark)
 
 option(BENCHMARK_ENABLE_TESTING "Enable testing of the benchmark library." ON)
-option(BENCHMARK_ENABLE_REGEX "Enable the use of regexes." ON)
 
 # Make sure we can import out CMake functions
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -62,20 +61,10 @@ set(GENERIC_LIB_VERSION ${VERSION})
 string(SUBSTRING ${VERSION} 0 1 GENERIC_LIB_SOVERSION)
 
 # C++ feature checks
-if (BENCHMARK_ENABLE_REGEX)
-  include(CXXFeatureCheck)
-  cxx_feature_check(STD_REGEX)
-  cxx_feature_check(GNU_POSIX_REGEX)
-  cxx_feature_check(POSIX_REGEX)
-endif()
-
-if (NOT HAVE_STD_REGEX AND NOT HAVE_GNU_POSIX_REGEX AND NOT HAVE_POSIX_REGEX)
-  if (BENCHMARK_ENABLE_REGEX)
-    message(WARNING "No Regex found. Disabling regex functionality.")
-  endif()
-  set(HAVE_NO_REGEX ON)
-  add_definitions(-DHAVE_NO_REGEX)
-endif()
+include(CXXFeatureCheck)
+cxx_feature_check(STD_REGEX)
+cxx_feature_check(GNU_POSIX_REGEX)
+cxx_feature_check(POSIX_REGEX)
 
 # Set up directories
 include_directories(${PROJECT_SOURCE_DIR}/include)

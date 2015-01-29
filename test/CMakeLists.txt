@@ -12,9 +12,8 @@ add_test(benchmark_filter_both benchmark_test --benchmark_filter=*Calculate* 0)
 add_test(benchmark_filter_regex_wildcard benchmark_test --benchmark_filter=.*Calculate.* 16)
 
 # Test harness for regex wrapper
-if (NOT HAVE_NO_REGEX)
-  add_executable(re_test ${RE_FILES} "re_test.cc")
-  target_link_libraries(re_test benchmark gtest gtest_main ${CMAKE_THREAD_LIBS_INIT})
-  add_dependencies(re_test googletest)
-  add_test(regex re_test)
-endif()
+
+add_executable(re_test ${RE_FILES} "re_test.cc")
+target_link_libraries(re_test benchmark gtest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+add_dependencies(re_test googletest)
+add_test(regex re_test)

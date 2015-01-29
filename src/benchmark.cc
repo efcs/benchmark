@@ -16,9 +16,7 @@
 #include "check.h"
 #include "colorprint.h"
 #include "commandlineflags.h"
-#ifndef HAVE_NO_REGEX
 #include "re.h"
-#endif
 #include "sleep.h"
 #include "stat.h"
 #include "sysinfo.h"
@@ -36,13 +34,11 @@
 #include <thread>
 #include <sstream>
 
-#ifndef HAVE_NO_REGEX
 DEFINE_string(benchmark_filter, ".",
               "A regular expression that specifies the set of benchmarks "
               "to execute.  If this flag is empty, no benchmarks are run.  "
               "If this flag is the string \"all\", all benchmarks linked "
               "into the process are run.");
-#endif
 
 DEFINE_int32(benchmark_iterations, 0,
              "Total number of iterations per benchmark. 0 means the benchmarks "
@@ -371,20 +367,17 @@ void BenchmarkFamilies::FindBenchmarks(
     const std::string& spec,
     std::vector<Benchmark::Instance>* benchmarks) {
   // Make regular expression out of command-line flag
-#ifndef HAVE_NO_REGEX
   Regex re;
   std::string re_error;
   if (!re.Init(spec, &re_error)) {
     std::cerr << "Could not compile benchmark re: " << re_error << std::endl;
     return;
   }
-#endif
 
   std::lock_guard<std::mutex> l(mutex_);
   for (internal::Benchmark* family : families_) {
     if (family == nullptr) continue;  // Family was deleted
 
-#ifndef HAVE_NO_REGEX
     // Match against filter.
     if (!re.Match(family->name_)) {
 #ifdef DEBUG
@@ -392,7 +385,6 @@ void BenchmarkFamilies::FindBenchmarks(
 #endif
       continue;
     }
-#endif
 
     std::vector<Benchmark::Instance> instances;
     if (family->rangeX_.empty() && family->rangeY_.empty()) {
@@ -528,9 +520,7 @@ void UseRealTime() { use_real_time = true; }
 void PrintUsageAndExit() {
   fprintf(stdout,
           "benchmark"
-#ifndef HAVE_NO_REGEX
           " [--benchmark_filter=<regex>]\n" "         "
-#endif
           " [--benchmark_iterations=<iterations>]\n"
           "          [--benchmark_min_time=<min_time>]\n"
           //"          [--benchmark_memory_usage]\n"
@@ -543,9 +533,7 @@ void PrintUsageAndExit() {
 void ParseCommandLineFlags(int* argc, const char** argv) {
   for (int i = 1; i < *argc; ++i) {
     if (
-#ifndef HAVE_NO_REGEX
         ParseStringFlag(argv[i], "benchmark_filter", &FLAGS_benchmark_filter) ||
-#endif
         ParseInt32Flag(argv[i], "benchmark_iterations",
                        &FLAGS_benchmark_iterations) ||
         ParseDoubleFlag(argv[i], "benchmark_min_time",
@@ -1355,11 +1343,7 @@ void FindMatchingBenchmarkNames(const std::string& spec,
 }  // end namespace internal
 
 void RunSpecifiedBenchmarks(const BenchmarkReporter* reporter /*= nullptr*/) {
-#ifndef HAVE_NO_REGEX
   std::string spec = FLAGS_benchmark_filter;
-#else
-  std::string spec = "";
-#endif
   if (spec.empty() || spec == "all")
     spec = ".";  // Regexp that matches all benchmarks
   internal::ConsoleReporter default_reporter;

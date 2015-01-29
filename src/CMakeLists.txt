@@ -9,7 +9,7 @@ elseif(HAVE_GNU_POSIX_REGEX)
 elseif(HAVE_POSIX_REGEX)
   set(RE_FILES "re_posix.cc")
 else()
-  set(RE_FILES "")
+  message(FATAL_ERROR "No regex implementation provided.")
 endif()
 
 # Build the benchmark library
