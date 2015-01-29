@@ -60,6 +60,9 @@ DEFINE_int32(benchmark_repetitions, 1,
              "The number of runs of each benchmark. If greater than 1, the "
              "mean and standard deviation of the runs will be reported.");
 
+DEFINE_bool(benchmark_use_real_time, false,
+            "Use real time to measure benchmarks.");
+
 DEFINE_int32(v, 0, "The level of verbose logging to output");
 DEFINE_bool(color_print, true, "Enables colorized logging.");
 
@@ -522,6 +525,7 @@ void PrintUsageAndExit() {
           "          [--benchmark_min_time=<min_time>]\n"
           //"          [--benchmark_memory_usage]\n"
           "          [--benchmark_repetitions=<num_repetitions>]\n"
+          "          [--benchmark_use_real_time={true|false}]\n"
           "          [--color_print={true|false}]\n"
           "          [--v=<verbosity>]\n");
   exit(0);
@@ -539,6 +543,8 @@ void ParseCommandLineFlags(int* argc, const char** argv) {
         //                      &FLAGS_gbenchmark_memory_usage) ||
         ParseInt32Flag(argv[i], "benchmark_repetitions",
                        &FLAGS_benchmark_repetitions) ||
+        ParseBoolFlag(argv[i], "benchmark_use_real_time",
+                      &FLAGS_benchmark_use_real_time) ||
         ParseBoolFlag(argv[i], "color_print", &FLAGS_color_print) ||
         ParseInt32Flag(argv[i], "v", &FLAGS_v)) {
       for (int j = i; j != *argc; ++j) argv[j] = argv[j + 1];
@@ -850,7 +856,7 @@ void Benchmark::MeasureOverhead() {
 }
 
 void Benchmark::RunInstance(const Instance& b, const BenchmarkReporter* br) {
-  use_real_time = false;
+  use_real_time = FLAGS_benchmark_use_real_time;
   running_benchmark = true;
   // get_memory_usage = FLAGS_gbenchmark_memory_usage;
   State::FastClock clock(State::FastClock::CPU_TIME);
@@ -1128,7 +1134,7 @@ bool State::FinishInterval() {
 
   const double accumulated_time = walltime::Now() - start_time_;
   const double total_overhead = overhead * iterations_;
-  //CHECK_LT(pause_real_time_, accumulated_time);
+  CHECK_LT(pause_real_time_, accumulated_time);
   //CHECK_LT(pause_real_time_ + total_overhead, accumulated_time);
   data.real_accumulated_time =
       accumulated_time - (pause_real_time_ + total_overhead);
