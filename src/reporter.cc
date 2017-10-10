@@ -22,6 +22,10 @@
 #include <vector>
 
 #include "check.h"
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <cassert>
 
 namespace benchmark {
 
@@ -58,6 +62,7 @@ static double RemoveNegZero(double D) {
     assert(std::fpclassify(D) != FP_NAN);
     std::cout << std::hexfloat << D << std::endl;
     assert(D > -0.5);
+    assert(false);
     return 0.0;
   }
   return D;
