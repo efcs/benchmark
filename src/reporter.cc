@@ -14,6 +14,7 @@
 
 #include "benchmark/benchmark.h"
 #include "timers.h"
+#include <bitset>
 
 #include <cstdlib>
 
