@@ -116,12 +116,7 @@ static double RemoveNegZero(double D) {
     show_fe_exceptions();
     assert(D <= 0.0);
     show_fe_exceptions();
-
-#ifdef __DBL_TRUE_MIN__
-    double TM = __DBL_TRUE_MIN__;
-    show_binrep(TM);
-#endif
-    assert(VD <= Lim::round_error());
+    assert(false);
     return 0.0;
   }
   return D;
