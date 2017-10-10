@@ -61,6 +61,9 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 
 void show_fe_exceptions(void)
 {
+    auto printf = [](const char* S) {
+      std::cout << S;
+    };
     printf("exceptions raised:");
     if(fetestexcept(FE_DIVBYZERO)) printf(" FE_DIVBYZERO");
     if(fetestexcept(FE_INEXACT))   printf(" FE_INEXACT");
@@ -68,7 +71,7 @@ void show_fe_exceptions(void)
     if(fetestexcept(FE_OVERFLOW))  printf(" FE_OVERFLOW");
     if(fetestexcept(FE_UNDERFLOW)) printf(" FE_UNDERFLOW");
     feclearexcept(FE_ALL_EXCEPT);
-    printf("\n");
+    std::cout << std::endl;
 }
 
 template<typename T>
@@ -135,7 +138,6 @@ static double RemoveNegZero(double D) {
     show_binrep(TM);
 #endif
     assert(VD <= Lim::round_error());
-    assert(false);
     return 0.0;
   }
   return D;
