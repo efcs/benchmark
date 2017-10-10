@@ -65,6 +65,7 @@ static double RemoveNegZero(double D) {
     assert(std::fpclassify(D) != FP_SUBNORMAL);
     std::cout.precision(Lim::max_digits10);
     std::cout << std::hexfloat << D << std::endl;
+    assert(isnormal(D));
     assert(D > -0.5);
     assert(D > -0.0001);
     assert(D >= (-Lim::denorm_min()));
