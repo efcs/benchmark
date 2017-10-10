@@ -58,16 +58,18 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 
 static double RemoveNegZero(double D) {
   using Lim = std::numeric_limits<double>;
+  static_assert(Lim::has_denorm, "");
   if (std::signbit(D) == 1) {
     assert(std::fpclassify(D) != FP_ZERO);
     assert(std::fpclassify(D) != FP_NAN);
+    std::cout.precision(Lim::max_digits10);
     std::cout << std::hexfloat << D << std::endl;
     assert(D > -0.5);
     assert(D > -0.0001);
     assert(!(D == 0.0));
     assert(!(D == -0.0));
-    assert(D >= (-Lim::epsilon()));
-    assert(D > (-Lim::epsilon()));
+    assert(D >= (-Lim::denorm_min()));
+    assert(D > (-Lim::denorm_min()));
     assert(false);
     return 0.0;
   }
