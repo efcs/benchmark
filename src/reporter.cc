@@ -22,6 +22,7 @@
 #include <tuple>
 #include <vector>
 #include <cfloat>
+#include <cfenv>
 
 #include "check.h"
 #ifdef NDEBUG
@@ -56,6 +57,18 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
   Out << "***WARNING*** Library was built as DEBUG. Timings may be "
          "affected.\n";
 #endif
+}
+
+void show_fe_exceptions(void)
+{
+    printf("exceptions raised:");
+    if(fetestexcept(FE_DIVBYZERO)) printf(" FE_DIVBYZERO");
+    if(fetestexcept(FE_INEXACT))   printf(" FE_INEXACT");
+    if(fetestexcept(FE_INVALID))   printf(" FE_INVALID");
+    if(fetestexcept(FE_OVERFLOW))  printf(" FE_OVERFLOW");
+    if(fetestexcept(FE_UNDERFLOW)) printf(" FE_UNDERFLOW");
+    feclearexcept(FE_ALL_EXCEPT);
+    printf("\n");
 }
 
 template<typename T>
@@ -113,14 +126,15 @@ static double RemoveNegZero(double D) {
     assert(!std::isunordered(0.0, D));
     assert(D > -0.5);
     assert(D > -0.0001);
-
+    show_fe_exceptions();
+    assert(D == 0.0);
+    show_fe_exceptions();
 
 #ifdef __DBL_TRUE_MIN__
     double TM = __DBL_TRUE_MIN__;
     show_binrep(TM);
 #endif
-    assert(VD <= L);
-    assert(D >= (0.0-Lim::denorm_min()));
+    assert(VD <= Lim::round_error());
     assert(false);
     return 0.0;
   }
