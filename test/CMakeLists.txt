@@ -44,84 +44,8 @@ endmacro(compile_output_test)
 
 
 # Demonstration executable
-compile_benchmark_test(benchmark_test)
-add_test(benchmark benchmark_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(filter_test)
-macro(add_filter_test name filter expect)
-  add_test(${name} filter_test --benchmark_min_time=0.01 --benchmark_filter=${filter} ${expect})
-  add_test(${name}_list_only filter_test --benchmark_list_tests --benchmark_filter=${filter} ${expect})
-endmacro(add_filter_test)
-
-add_filter_test(filter_simple "Foo" 3)
-add_filter_test(filter_suffix "BM_.*" 4)
-add_filter_test(filter_regex_all ".*" 5)
-add_filter_test(filter_regex_blank "" 5)
-add_filter_test(filter_regex_none "monkey" 0)
-add_filter_test(filter_regex_wildcard ".*Foo.*" 3)
-add_filter_test(filter_regex_begin "^BM_.*" 4)
-add_filter_test(filter_regex_begin2 "^N" 1)
-add_filter_test(filter_regex_end ".*Ba$" 1)
-
-compile_benchmark_test(options_test)
-add_test(options_benchmarks options_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(basic_test)
-add_test(basic_benchmark basic_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(diagnostics_test)
-add_test(diagnostics_test diagnostics_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(skip_with_error_test)
-add_test(skip_with_error_test skip_with_error_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(donotoptimize_test)
-# Some of the issues with DoNotOptimize only occur when optimization is enabled
-check_cxx_compiler_flag(-O3 BENCHMARK_HAS_O3_FLAG)
-if (BENCHMARK_HAS_O3_FLAG)
-  set_target_properties(donotoptimize_test PROPERTIES COMPILE_FLAGS "-O3")
-endif()
-add_test(donotoptimize_test donotoptimize_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(fixture_test)
-add_test(fixture_test fixture_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(register_benchmark_test)
-add_test(register_benchmark_test register_benchmark_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(map_test)
-add_test(map_test map_test --benchmark_min_time=0.01)
-
-compile_benchmark_test(multiple_ranges_test)
-add_test(multiple_ranges_test multiple_ranges_test --benchmark_min_time=0.01)
-
 compile_output_test(reporter_output_test)
 add_test(reporter_output_test reporter_output_test --benchmark_min_time=0.01)
-
-compile_output_test(user_counters_test)
-add_test(user_counters_test user_counters_test --benchmark_min_time=0.01)
-
-compile_output_test(user_counters_tabular_test)
-add_test(user_counters_tabular_test user_counters_tabular_test --benchmark_counters_tabular=true --benchmark_min_time=0.01)
-
-check_cxx_compiler_flag(-std=c++03 BENCHMARK_HAS_CXX03_FLAG)
-if (BENCHMARK_HAS_CXX03_FLAG)
-  compile_benchmark_test(cxx03_test)
-  set_target_properties(cxx03_test
-      PROPERTIES
-      COMPILE_FLAGS "-std=c++03")
-  # libstdc++ provides different definitions within <map> between dialects. When
-  # LTO is enabled and -Werror is specified GCC diagnoses this ODR violation
-  # causing the test to fail to compile. To prevent this we explicitly disable
-  # the warning.
-  check_cxx_compiler_flag(-Wno-odr BENCHMARK_HAS_WNO_ODR)
-  if (BENCHMARK_ENABLE_LTO AND BENCHMARK_HAS_WNO_ODR)
-    set_target_properties(cxx03_test
-        PROPERTIES
-        LINK_FLAGS "-Wno-odr")
-  endif()
-  add_test(cxx03 cxx03_test --benchmark_min_time=0.01)
-endif()
 
 # Attempt to work around flaky test failures when running on Appveyor servers.
 if (DEFINED ENV{APPVEYOR})
