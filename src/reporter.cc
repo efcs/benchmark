@@ -64,7 +64,7 @@ void show_binrep(const T& a)
     const char* end = beg + sizeof(a);
     while(beg != end)
         std::cout << std::bitset<CHAR_BIT>(*beg++) << ' ';
-    std::cout << '\n';
+    std::cout << std::endl;
 }
 
 static double RemoveNegZero(double D) {
@@ -74,6 +74,8 @@ static double RemoveNegZero(double D) {
     assert(std::fpclassify(D) != FP_ZERO);
     assert(std::fpclassify(D) != FP_NAN);
     assert(std::fpclassify(D) != FP_SUBNORMAL);
+    assert(std::fpclassify(D) != FP_ILOGB0);
+    std::cout << std::hex << std::fpclassify(D) << std::endl;
 #if 0
     std::cout.precision(Lim::max_digits10);
     std::cout << std::hex;
@@ -86,7 +88,12 @@ static double RemoveNegZero(double D) {
     assert(!std::isunordered(0.0, D));
     assert(D > -0.5);
     assert(D > -0.0001);
-    assert(D > (0.0-Lim::denorm_min()-Lim::denorm_min()));
+    auto volatile VD = D;
+    VD = std::fabs(VD);
+    auto volatile L = Lim::denorm_min();
+    show_binrep(L);
+    show_binrep(VD);
+    assert(VD <= L);
     assert(D >= (0.0-Lim::denorm_min()));
     assert(false);
     return 0.0;
