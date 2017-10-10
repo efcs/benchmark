@@ -67,6 +67,10 @@ void show_binrep(const T& a)
     std::cout << std::endl;
 }
 
+#ifdef __MINGW_FPCLASS_DEFINED
+#error SHIT
+#endif
+
 static double RemoveNegZero(double D) {
   using Lim = std::numeric_limits<double>;
   static_assert(Lim::has_denorm, "");
