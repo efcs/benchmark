@@ -55,6 +55,7 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 static double RemoveNegZero(double D) {
   if (std::signbit(D) == 1) {
     assert(std::fpclassify(D) != FP_ZERO);
+    assert(std::fpclassify(D) != FP_NAN);
     assert(D > -0.5);
     return 0.0;
   }
