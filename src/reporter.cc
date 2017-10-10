@@ -86,8 +86,8 @@ static double RemoveNegZero(double D) {
     assert(!std::isunordered(0.0, D));
     assert(D > -0.5);
     assert(D > -0.0001);
-    assert(D >= (-Lim::denorm_min()));
-    assert(D > (-Lim::denorm_min()));
+    assert(D > (0.0-Lim::denorm_min()-Lim::denorm_min()));
+    assert(D >= (0.0-Lim::denorm_min()));
     assert(false);
     return 0.0;
   }
