@@ -61,8 +61,8 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 template<typename T>
 void show_binrep(const T& a)
 {
-    const char* beg = reinterpret_cast<const char*>(&a);
-    const char* end = beg + sizeof(a);
+    const unsigned char* beg = reinterpret_cast<const unsigned char*>(&a);
+    const unsigned char* end = beg + sizeof(a);
     while(beg != end)
         std::cout << std::bitset<CHAR_BIT>(*beg++) << ' ';
     std::cout << std::endl;
