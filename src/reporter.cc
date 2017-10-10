@@ -96,23 +96,6 @@ static double RemoveNegZero(double D) {
     auto volatile VD = D;
     VD = std::fabs(VD);
     assert(std::signbit(VD) == 0);
-    auto volatile L = Lim::denorm_min();
-    assert(std::fpclassify(VD) != FP_ZERO);
-    assert(std::fpclassify(VD) != FP_NAN);
-    assert(std::fpclassify(VD) != FP_SUBNORMAL);
-    assert(std::fpclassify(VD) != FP_ILOGB0);
-    std::cout << std::hex << std::fpclassify(VD) << std::endl;
-    std::cout << FP_ZERO << std::endl;
-    assert(std::fpclassify(VD) == FP_NORMAL);
-    assert(std::fpclassify(D) == FP_NORMAL);
-
-#if 0
-    std::cout.precision(Lim::max_digits10);
-    std::cout << std::hex;
-    std::cout.binary
-    std::cout.write(reinterpret_cast<const char*>(&D), sizeof(D));
-    std::cout << std::endl;
-#endif
     auto Name = [&](const char* N) {
       std::cout << N << std::endl;
     };
@@ -121,7 +104,7 @@ static double RemoveNegZero(double D) {
     Name("round_error");
     show_binrep(Lim::round_error());
     Name("L");
-    show_binrep((double)L);
+    show_binrep(Lim::denorm_min());
     Name("VD");
     show_binrep((double)VD);
     double MIN = __DBL_MIN__;
