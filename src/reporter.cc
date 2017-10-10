@@ -105,8 +105,10 @@ static double RemoveNegZero(double D) {
     show_binrep(Lim::round_error());
     Name("L");
     show_binrep((double)L);
+    Name("VD");
     show_binrep((double)VD);
     double MIN = __DBL_MIN__;
+    Name("Min");
     show_binrep(MIN);
     assert(std::isnormal(D));
     assert(!std::isunordered(0.0, D));
