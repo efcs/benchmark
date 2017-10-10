@@ -73,6 +73,7 @@ static double RemoveNegZero(double D) {
   if (std::signbit(D) == 1) {
     auto volatile VD = D;
     VD = std::fabs(VD);
+    assert(std::signbit(VD) == 0);
     auto volatile L = Lim::denorm_min();
     assert(std::fpclassify(VD) != FP_ZERO);
     assert(std::fpclassify(VD) != FP_NAN);
@@ -81,6 +82,8 @@ static double RemoveNegZero(double D) {
     std::cout << std::hex << std::fpclassify(VD) << std::endl;
     std::cout << FP_ZERO << std::endl;
     assert(std::fpclassify(VD) == FP_NORMAL);
+    assert(std::fpclassify(D) == FP_NORMAL);
+
 #if 0
     std::cout.precision(Lim::max_digits10);
     std::cout << std::hex;
@@ -96,6 +99,12 @@ static double RemoveNegZero(double D) {
 
     show_binrep((double)L);
     show_binrep((double)VD);
+    double MIN = __DBL_MIN__;
+    show_binrep(MIN);
+#ifdef __DBL_TRUE_MIN__
+    double TM = __DBL_TRUE_MIN__;
+    show_binrep(TM);
+#endif
     assert(VD <= L);
     assert(D >= (0.0-Lim::denorm_min()));
     assert(false);
