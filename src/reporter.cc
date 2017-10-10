@@ -21,6 +21,7 @@
 #include <iostream>
 #include <tuple>
 #include <vector>
+#include <cfloat>
 
 #include "check.h"
 #ifdef NDEBUG
