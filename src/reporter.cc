@@ -66,7 +66,7 @@ static double RemoveNegZero(double D) {
     std::cout.precision(Lim::max_digits10);
     std::cout.write(reinterpret_cast<const char*>(D), sizeof(D));
     std::cout << std::endl;
-    assert(isnormal(D));
+    assert(std::isnormal(D));
     assert(D > -0.5);
     assert(D > -0.0001);
     assert(D >= (-Lim::denorm_min()));
