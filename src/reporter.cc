@@ -96,17 +96,24 @@ static double RemoveNegZero(double D) {
     std::cout.write(reinterpret_cast<const char*>(&D), sizeof(D));
     std::cout << std::endl;
 #endif
+    auto Name = [&](const char* N) {
+      std::cout << N << std::endl;
+    };
+    Name("D");
     show_binrep(D);
+    Name("round_error");
     show_binrep(Lim::round_error());
+    Name("L");
+    show_binrep((double)L);
+    show_binrep((double)VD);
+    double MIN = __DBL_MIN__;
+    show_binrep(MIN);
     assert(std::isnormal(D));
     assert(!std::isunordered(0.0, D));
     assert(D > -0.5);
     assert(D > -0.0001);
 
-    show_binrep((double)L);
-    show_binrep((double)VD);
-    double MIN = __DBL_MIN__;
-    show_binrep(MIN);
+
 #ifdef __DBL_TRUE_MIN__
     double TM = __DBL_TRUE_MIN__;
     show_binrep(TM);
