@@ -79,6 +79,7 @@ static double RemoveNegZero(double D) {
     assert(std::fpclassify(VD) != FP_SUBNORMAL);
     assert(std::fpclassify(D) != FP_ILOGB0);
     std::cout << std::hex << std::fpclassify(VD) << std::endl;
+    std::cout << FP_ZERO << std::endl;
 #if 0
     std::cout.precision(Lim::max_digits10);
     std::cout << std::hex;
