@@ -96,6 +96,7 @@ static double RemoveNegZero(double D) {
     std::cout << std::endl;
 #endif
     show_binrep(D);
+    show_binrep(Lim::round_error());
     assert(std::isnormal(D));
     assert(!std::isunordered(0.0, D));
     assert(D > -0.5);
