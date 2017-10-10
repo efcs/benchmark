@@ -75,11 +75,12 @@ static double RemoveNegZero(double D) {
     VD = std::fabs(VD);
     auto volatile L = Lim::denorm_min();
     assert(std::fpclassify(VD) != FP_ZERO);
-    assert(std::fpclassify(D) != FP_NAN);
+    assert(std::fpclassify(VD) != FP_NAN);
     assert(std::fpclassify(VD) != FP_SUBNORMAL);
-    assert(std::fpclassify(D) != FP_ILOGB0);
+    assert(std::fpclassify(VD) != FP_ILOGB0);
     std::cout << std::hex << std::fpclassify(VD) << std::endl;
     std::cout << FP_ZERO << std::endl;
+    assert(std::fpclassify(VD) == FP_NORMAL);
 #if 0
     std::cout.precision(Lim::max_digits10);
     std::cout << std::hex;
