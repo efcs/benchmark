@@ -90,7 +90,9 @@ void show_binrep(const T& a)
 static double RemoveNegZero(double D) {
   using Lim = std::numeric_limits<double>;
   static_assert(Lim::has_denorm, "");
+  static_assert(Lim::is_iec559, "");
   if (std::signbit(D) == 1) {
+
     auto volatile VD = D;
     VD = std::fabs(VD);
     assert(std::signbit(VD) == 0);
@@ -127,8 +129,7 @@ static double RemoveNegZero(double D) {
     show_binrep(MIN);
     assert(std::isnormal(D));
     assert(!std::isunordered(0.0, D));
-    assert(D > -0.5);
-    assert(D > -0.0001);
+
     show_fe_exceptions();
     assert(D == 0.0);
     show_fe_exceptions();
