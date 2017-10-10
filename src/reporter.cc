@@ -52,16 +52,24 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 #endif
 }
 
+static double RemoveNegZero(double D) {
+  if (std::signbit(D) == 1) {
+    assert(D > -0.5);
+    return 0.0;
+  }
+  return D;
+}
+
 double BenchmarkReporter::Run::GetAdjustedRealTime() const {
   double new_time = real_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
-  return new_time;
+  return RemoveNegZero(new_time);
 }
 
 double BenchmarkReporter::Run::GetAdjustedCPUTime() const {
   double new_time = cpu_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
-  return new_time;
+  return RemoveNegZero(new_time);
 }
 
 }  // end namespace benchmark
