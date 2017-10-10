@@ -64,6 +64,7 @@ static double RemoveNegZero(double D) {
     assert(std::fpclassify(D) != FP_NAN);
     assert(std::fpclassify(D) != FP_SUBNORMAL);
     std::cout.precision(Lim::max_digits10);
+    std::cout << std::hex;
     std::cout.write(reinterpret_cast<const char*>(D), sizeof(D));
     std::cout << std::endl;
     assert(std::isnormal(D));
