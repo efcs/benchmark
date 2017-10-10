@@ -63,14 +63,13 @@ void show_binrep(const T& a)
 {
     const unsigned char* beg = reinterpret_cast<const unsigned char*>(&a);
     const unsigned char* end = beg + sizeof(a);
-    while(beg != end)
-        std::cout << std::bitset<CHAR_BIT>(*beg++) << ' ';
+    while (end != beg)
+      std::cout << std::bitset<CHAR_BIT>(*(--end)) << ' ';
+
+    //while(beg != end)
+    //    std::cout << std::bitset<CHAR_BIT>(*beg++) << ' ';
     std::cout << std::endl;
 }
-
-#ifdef __MINGW_FPCLASS_DEFINED
-#error SHIT
-#endif
 
 static double RemoveNegZero(double D) {
   using Lim = std::numeric_limits<double>;
