@@ -67,8 +67,6 @@ static double RemoveNegZero(double D) {
     std::cout << std::hexfloat << D << std::endl;
     assert(D > -0.5);
     assert(D > -0.0001);
-    assert(!(D == 0.0));
-    assert(!(D == -0.0));
     assert(D >= (-Lim::denorm_min()));
     assert(D > (-Lim::denorm_min()));
     assert(false);
