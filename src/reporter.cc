@@ -71,11 +71,14 @@ static double RemoveNegZero(double D) {
   using Lim = std::numeric_limits<double>;
   static_assert(Lim::has_denorm, "");
   if (std::signbit(D) == 1) {
-    assert(std::fpclassify(D) != FP_ZERO);
+    auto volatile VD = D;
+    VD = std::fabs(VD);
+    auto volatile L = Lim::denorm_min();
+    assert(std::fpclassify(VD) != FP_ZERO);
     assert(std::fpclassify(D) != FP_NAN);
-    assert(std::fpclassify(D) != FP_SUBNORMAL);
+    assert(std::fpclassify(VD) != FP_SUBNORMAL);
     assert(std::fpclassify(D) != FP_ILOGB0);
-    std::cout << std::hex << std::fpclassify(D) << std::endl;
+    std::cout << std::hex << std::fpclassify(VD) << std::endl;
 #if 0
     std::cout.precision(Lim::max_digits10);
     std::cout << std::hex;
@@ -88,11 +91,9 @@ static double RemoveNegZero(double D) {
     assert(!std::isunordered(0.0, D));
     assert(D > -0.5);
     assert(D > -0.0001);
-    auto volatile VD = D;
-    VD = std::fabs(VD);
-    auto volatile L = Lim::denorm_min();
-    show_binrep(L);
-    show_binrep(VD);
+
+    show_binrep((double)L);
+    show_binrep((double)VD);
     assert(VD <= L);
     assert(D >= (0.0-Lim::denorm_min()));
     assert(false);
