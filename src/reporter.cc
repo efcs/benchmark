@@ -114,7 +114,7 @@ static double RemoveNegZero(double D) {
     assert(!std::isunordered(0.0, D));
 
     show_fe_exceptions();
-    assert(D == 0.0);
+    assert(D <= 0.0);
     show_fe_exceptions();
 
 #ifdef __DBL_TRUE_MIN__
