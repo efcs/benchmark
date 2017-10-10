@@ -56,6 +56,16 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 #endif
 }
 
+template<typename T>
+void show_binrep(const T& a)
+{
+    const char* beg = reinterpret_cast<const char*>(&a);
+    const char* end = beg + sizeof(a);
+    while(beg != end)
+        std::cout << std::bitset<CHAR_BIT>(*beg++) << ' ';
+    std::cout << '\n';
+}
+
 static double RemoveNegZero(double D) {
   using Lim = std::numeric_limits<double>;
   static_assert(Lim::has_denorm, "");
@@ -63,11 +73,16 @@ static double RemoveNegZero(double D) {
     assert(std::fpclassify(D) != FP_ZERO);
     assert(std::fpclassify(D) != FP_NAN);
     assert(std::fpclassify(D) != FP_SUBNORMAL);
+#if 0
     std::cout.precision(Lim::max_digits10);
     std::cout << std::hex;
+    std::cout.binary
     std::cout.write(reinterpret_cast<const char*>(&D), sizeof(D));
     std::cout << std::endl;
+#endif
+    show_binrep(D);
     assert(std::isnormal(D));
+    assert(!std::isunordered(0.0, D));
     assert(D > -0.5);
     assert(D > -0.0001);
     assert(D >= (-Lim::denorm_min()));
