@@ -14,21 +14,14 @@
 
 #include "benchmark/benchmark.h"
 #include "timers.h"
-#include <bitset>
 
 #include <cstdlib>
 
 #include <iostream>
 #include <tuple>
 #include <vector>
-#include <cfloat>
-#include <cfenv>
 
 #include "check.h"
-#ifdef NDEBUG
-#undef NDEBUG
-#endif
-#include <cassert>
 
 namespace benchmark {
 
@@ -59,36 +52,8 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 #endif
 }
 
-void show_fe_exceptions(void)
-{
-    auto printf = [](const char* S) {
-      std::cout << S;
-    };
-    printf("exceptions raised:");
-    if(fetestexcept(FE_DIVBYZERO)) printf(" FE_DIVBYZERO");
-    if(fetestexcept(FE_INEXACT))   printf(" FE_INEXACT");
-    if(fetestexcept(FE_INVALID))   printf(" FE_INVALID");
-    if(fetestexcept(FE_OVERFLOW))  printf(" FE_OVERFLOW");
-    if(fetestexcept(FE_UNDERFLOW)) printf(" FE_UNDERFLOW");
-    feclearexcept(FE_ALL_EXCEPT);
-    std::cout << std::endl;
-}
-
-template<typename T>
-void show_binrep(const T& a)
-{
-    const unsigned char* beg = reinterpret_cast<const unsigned char*>(&a);
-    const unsigned char* end = beg + sizeof(a);
-    while (end != beg)
-      std::cout << std::bitset<8>(*(--end)) << ' ';
-
-    //while(beg != end)
-    //    std::cout << std::bitset<CHAR_BIT>(*beg++) << ' ';
-    std::cout << std::endl;
-}
-
 static double RemoveNegZero(double D) {
-#ifdef __MINGW32__
+#if 0 && __MINGW32__
   using Lim = std::numeric_limits<double>;
   if (std::signbit(D) == 1) {
     assert(std::fabs(D) < Lim::round_error());
