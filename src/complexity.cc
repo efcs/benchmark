@@ -100,12 +100,14 @@ LeastSq MinimalLeastSq(const std::vector<int>& n,
   double rms = 0.0;
   for (size_t i = 0; i < n.size(); ++i) {
     double fit = result.coef * fitting_curve(n[i]);
-    rms += pow((time[i] - fit), 2);
+    rms += std::pow((time[i] - fit), 2);
   }
 
   // Normalized RMS by the mean of the observed values
   double mean = sigma_time / n.size();
-  result.rms = sqrt(rms / n.size()) / mean;
+  double tmp = rms / n.size();
+
+  result.rms = std::sqrt(rms / n.size()) / mean;
 
   return result;
 }
