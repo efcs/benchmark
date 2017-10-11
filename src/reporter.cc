@@ -92,7 +92,7 @@ static double RemoveNegZero(double D) {
   static_assert(Lim::has_denorm, "");
   static_assert(Lim::is_iec559, "");
   if (std::signbit(D) == 1) {
-
+    assert(std::fabs(D) < Lim::round_error());
     auto volatile VD = D;
     VD = std::fabs(VD);
     assert(std::signbit(VD) == 0);
@@ -101,6 +101,8 @@ static double RemoveNegZero(double D) {
     };
     Name("D");
     show_binrep(D);
+    Name("epsilon");
+    show_binrep(Lim::epsilon());
     Name("round_error");
     show_binrep(Lim::round_error());
     Name("L");
