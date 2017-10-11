@@ -109,9 +109,8 @@ static double RemoveNegZero(double D) {
     show_binrep(Lim::denorm_min());
     Name("VD");
     show_binrep((double)VD);
-    double MIN = __DBL_MIN__;
     Name("Min");
-    show_binrep(MIN);
+    show_binrep(Lim::min());
 
     feclearexcept(FE_ALL_EXCEPT);
     assert(std::isnormal(D));
@@ -126,14 +125,18 @@ static double RemoveNegZero(double D) {
 }
 
 double BenchmarkReporter::Run::GetAdjustedRealTime() const {
+  feclearexcept(FE_ALL_EXCEPT);
   double new_time = real_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
+  show_fe_exceptions();
   return RemoveNegZero(new_time);
 }
 
 double BenchmarkReporter::Run::GetAdjustedCPUTime() const {
+  feclearexcept(FE_ALL_EXCEPT);
   double new_time = cpu_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
+  show_fe_exceptions();
   return RemoveNegZero(new_time);
 }
 
