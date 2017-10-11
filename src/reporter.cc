@@ -110,9 +110,9 @@ static double RemoveNegZero(double D) {
     double MIN = __DBL_MIN__;
     Name("Min");
     show_binrep(MIN);
-    assert(std::isnormal(D));
+
     feclearexcept(FE_ALL_EXCEPT);
-    assert(!std::isunordered(0.0, D));
+    assert(std::isnormal(D));
 
     show_fe_exceptions();
     assert(D <= 0.0);
