@@ -80,7 +80,7 @@ void show_binrep(const T& a)
     const unsigned char* beg = reinterpret_cast<const unsigned char*>(&a);
     const unsigned char* end = beg + sizeof(a);
     while (end != beg)
-      std::cout << std::bitset<CHAR_BIT>(*(--end)) << ' ';
+      std::cout << std::bitset<8>(*(--end)) << ' ';
 
     //while(beg != end)
     //    std::cout << std::bitset<CHAR_BIT>(*beg++) << ' ';
@@ -112,12 +112,7 @@ static double RemoveNegZero(double D) {
     Name("Min");
     show_binrep(Lim::min());
 
-    feclearexcept(FE_ALL_EXCEPT);
-    assert(std::isnormal(D));
-
-    show_fe_exceptions();
-    assert(D <= 0.0);
-    show_fe_exceptions();
+    assert(VD <= Lim::round_error());
     assert(false);
     return 0.0;
   }
