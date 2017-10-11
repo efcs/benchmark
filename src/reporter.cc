@@ -88,53 +88,26 @@ void show_binrep(const T& a)
 }
 
 static double RemoveNegZero(double D) {
+#ifdef __MINGW32__
   using Lim = std::numeric_limits<double>;
-  static_assert(Lim::has_denorm, "");
-  static_assert(Lim::is_iec559, "");
   if (std::signbit(D) == 1) {
     assert(std::fabs(D) < Lim::round_error());
-    auto volatile VD = D;
-    VD = std::fabs(VD);
-    assert(std::signbit(VD) == 0);
-    auto Name = [&](const char* N) {
-      std::cout << N << std::endl;
-    };
-    Name("D");
-    show_binrep(D);
-    Name("epsilon");
-    show_binrep(Lim::epsilon());
-    Name("round_error");
-    show_binrep(Lim::round_error());
-    Name("L");
-    show_binrep(Lim::denorm_min());
-    Name("VD");
-    show_binrep((double)VD);
-    Name("Min");
-    show_binrep(Lim::min());
-
-    assert(VD <= Lim::round_error());
-    assert(false);
     return 0.0;
   }
+#endif
   return D;
 }
 
 double BenchmarkReporter::Run::GetAdjustedRealTime() const {
-  feclearexcept(FE_ALL_EXCEPT);
   double new_time = real_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
-  volatile double D = new_time;
-  show_fe_exceptions();
-  return RemoveNegZero(D);
+  return RemoveNegZero(new_time);
 }
 
 double BenchmarkReporter::Run::GetAdjustedCPUTime() const {
-  feclearexcept(FE_ALL_EXCEPT);
   double new_time = cpu_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
-  volatile double D = new_time;
-  show_fe_exceptions();
-  return RemoveNegZero(D);
+  return RemoveNegZero(new_time);
 }
 
 }  // end namespace benchmark
