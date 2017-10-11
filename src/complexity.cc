@@ -106,8 +106,10 @@ LeastSq MinimalLeastSq(const std::vector<int>& n,
   // Normalized RMS by the mean of the observed values
   double mean = sigma_time / n.size();
   double tmp = rms / n.size();
-
-  result.rms = std::sqrt(rms / n.size()) / mean;
+  if (tmp <= 0.0)
+    result.rms = 0.0 / mean;
+  else
+    result.rms = std::sqrt(tmp) / mean;
 
   return result;
 }
