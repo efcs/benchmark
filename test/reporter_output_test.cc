@@ -305,7 +305,7 @@ ADD_CASES(TC_CSVOut,
 // ========================================================================= //
 
 const auto UserStatistics = [](const std::vector<double>& v) {
-  return v.back();
+  return v.back() < 0.0 ? 0.0 : v.back();
 };
 void BM_UserStats(benchmark::State& state) {
   while (state.KeepRunning()) {

@@ -57,7 +57,8 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 #endif
 #include <cassert>
 
-static double RemoveNegZero(double D) {
+static double RemoveNegZero(volatile double VD) {
+  double D = VD;
 #ifdef __MINGW32__
   using Lim = std::numeric_limits<double>;
   if (std::signbit(D) == 1) {
