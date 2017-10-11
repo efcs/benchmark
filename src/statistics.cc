@@ -56,7 +56,7 @@ auto SumSquares = [](const std::vector<double>& v) {
 auto Sqr = [](const double dat) { return dat * dat; };
 auto Sqrt = [](const double dat) {
   // Avoid NaN due to imprecision in the calculations
-  if (dat < 0.0) return 0.0;
+  if (dat <= 0.0) return 0.0;
   return std::sqrt(dat);
 };
 
