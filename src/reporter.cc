@@ -123,16 +123,18 @@ double BenchmarkReporter::Run::GetAdjustedRealTime() const {
   feclearexcept(FE_ALL_EXCEPT);
   double new_time = real_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
+  volatile double D = new_time;
   show_fe_exceptions();
-  return RemoveNegZero(new_time);
+  return RemoveNegZero(D);
 }
 
 double BenchmarkReporter::Run::GetAdjustedCPUTime() const {
   feclearexcept(FE_ALL_EXCEPT);
   double new_time = cpu_accumulated_time * GetTimeUnitMultiplier(time_unit);
   if (iterations != 0) new_time /= static_cast<double>(iterations);
+  volatile double D = new_time;
   show_fe_exceptions();
-  return RemoveNegZero(new_time);
+  return RemoveNegZero(D);
 }
 
 }  // end namespace benchmark
