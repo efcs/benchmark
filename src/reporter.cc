@@ -52,13 +52,20 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 #endif
 }
 
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <cassert>
+
 static double RemoveNegZero(double D) {
-#if 0 && __MINGW32__
+#ifdef __MINGW32__
   using Lim = std::numeric_limits<double>;
   if (std::signbit(D) == 1) {
     assert(std::fabs(D) < Lim::round_error());
     return 0.0;
   }
+#else
+  assert(std::signbit(D) == 0);
 #endif
   return D;
 }
