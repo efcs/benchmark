@@ -89,37 +89,32 @@ struct ValueUnion {
     // of union members from bytes.
     char bytes[];
   };
-  DataT *data;
+  DataT* Buff;
 
-  char* data() const { return data->bytes; }
+  char* data() const { return Buff->bytes; }
 
   std::string getAsString() const { return std::string(data()); }
 
   long long getAsInteger() const {
-    if (Size == sizeof(data->uint32_value))
-      return static_cast<int32_t>(data->uint32_value);
-    else if (Size == sizeof(data->uint64_value))
-      return static_cast<int64_t>(data->uint64_value);
+    if (Size == sizeof(Buff->uint32_value))
+      return static_cast<int32_t>(Buff->uint32_value);
+    else if (Size == sizeof(Buff->uint64_value))
+      return static_cast<int64_t>(Buff->uint64_value);
     CHECK(false) << "invalid size";
     return 0;
   }
 
   unsigned long long getAsUnsigned() const {
-    if (Size == sizeof(data->uint32_value))
-      return data->uint32_value;
-    else if (Size == sizeof(data->uint64_value))
-      return data->uint64_value;
+    if (Size == sizeof(Buff->uint32_value))
+      return Buff->uint32_value;
+    else if (Size == sizeof(Buff->uint64_value))
+      return Buff->uint64_value;
     CHECK(false) << "invalid size";
     return 0;
   }
 
-  static ValueUnion Create(size_t BuffSize) {.
-    const size_t UnionSize = sizeof(DataT) + BuffSize;
-    return ValueUnion(::new (std::malloc(UnionSize)) DataT(),UnionSize);
-  }
-
-  ValueUnion(ValueUnion&& other) : Size(other.Size), data(other.data)  {
-    other.data = nullptr;
+  ValueUnion(ValueUnion&& other) : Size(other.Size), Buff(other.Buff) {
+    other.Buff = nullptr;
     other.Size = 0;
   }
 
@@ -131,24 +126,21 @@ struct ValueUnion {
     return !empty();
   }
 
-  bool empty() const {
-    return data == nullptr;
-  }
+  bool empty() const { return Buff == nullptr; }
 
   void clear() {
-    if (data) {
-      std::free(data);
-      data = nullptr;
+    if (Buff) {
+      std::free(Buff);
+      Buff = nullptr;
     }
     Size = 0;
   }
 
-  ValueUnion() : Size(0), data(nullptr) {}
+  ValueUnion() : Size(0), Buff(nullptr) {}
 
   explicit ValueUnion(size_t BuffSize)
-    : Size(sizeof(DataT) + BuffSize),
-      data(::new (std::malloc(Size)) DataT())
-  {}
+      : Size(sizeof(DataT) + BuffSize),
+        Buff(::new (std::malloc(Size)) DataT()) {}
 };
 
 #ifdef __GNUC__
@@ -469,12 +461,10 @@ double GetCPUCyclesPerSecond() {
   //  139         error = sysctl_handle_int(oidp, &freq, sizeof(freq), req);
   std::string FreqStr = IsBSD ? "machdep.tsc_freq" : "hw.cpufrequency";
   unsigned long long hz = 0;
-  if (!GetSysctl(FreqStr, &hz)) {
-    fprintf(stderr, "Unable to determine clock rate from sysctl: %s: %s\n",
-            FreqStr.c_str(), strerror(errno));
-  } else {
-    info.cycles_per_second = hz;
-  }
+  if (GetSysctl(FreqStr, &hz)) return hz;
+
+  fprintf(stderr, "Unable to determine clock rate from sysctl: %s: %s\n",
+          FreqStr.c_str(), strerror(errno));
 
 #elif defined BENCHMARK_OS_WINDOWS
   // In NT, read MHz from the registry. If we fail to do so or we're in win9x
@@ -485,8 +475,8 @@ double GetCPUCyclesPerSecond() {
           SHGetValueA(HKEY_LOCAL_MACHINE,
                       "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
                       "~MHz", nullptr, &data, &data_size)))
-    info.cycles_per_second =
-        static_cast<double>((int64_t)data * (int64_t)(1000 * 1000));  // was mhz
+    return static_cast<double>((int64_t)data *
+                               (int64_t)(1000 * 1000));  // was mhz
 #endif
   // If we've fallen through, attempt to roughly estimate the CPU clock rate.
   const int estimate_time_ms = 1000;
