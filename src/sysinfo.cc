@@ -155,7 +155,7 @@ struct ValueUnion {
 #pragma GCC diagnostic pop
 #endif
 
-static ValueUnion GetSysctlImp(std::string const& Name) {
+ValueUnion GetSysctlImp(std::string const& Name) {
   size_t CurBuffSize = static_cast<size_t>(-1);
   errno = 0;
   sysctlbyname(Name.c_str(), nullptr, &CurBuffSize, nullptr, 0);
@@ -169,7 +169,7 @@ static ValueUnion GetSysctlImp(std::string const& Name) {
 }
 
 BENCHMARK_MAYBE_UNUSED
-static bool GetSysctl(std::string const& Name, std::string* Out) {
+bool GetSysctl(std::string const& Name, std::string* Out) {
   Out->clear();
   auto Buff = GetSysctlImp(Name);
   if (!Buff) return false;
@@ -179,7 +179,7 @@ static bool GetSysctl(std::string const& Name, std::string* Out) {
 
 template <class Tp,
           class = typename std::enable_if<std::is_integral<Tp>::value>::type>
-BENCHMARK_MAYBE_UNUSED static bool GetSysctl(std::string const& Name, Tp* Out) {
+BENCHMARK_MAYBE_UNUSED bool GetSysctl(std::string const& Name, Tp* Out) {
   *Out = 0;
   auto Buff = GetSysctlImp(Name);
   if (!Buff) return false;
@@ -188,7 +188,7 @@ BENCHMARK_MAYBE_UNUSED static bool GetSysctl(std::string const& Name, Tp* Out) {
 }
 
 BENCHMARK_MAYBE_UNUSED
-static bool GetSysctl(std::string const& Name, std::vector<std::string>* Vals) {
+bool GetSysctl(std::string const& Name, std::vector<std::string>* Vals) {
   std::string tmp;
   if (!GetSysctl(Name, &tmp)) return false;
   std::istringstream iss(tmp);
@@ -198,8 +198,8 @@ static bool GetSysctl(std::string const& Name, std::vector<std::string>* Vals) {
 }
 
 template <class Tp>
-BENCHMARK_MAYBE_UNUSED static bool GetSysctlWithError(std::string const& Name,
-                                                      Tp* val) {
+BENCHMARK_MAYBE_UNUSED bool GetSysctlWithError(std::string const& Name,
+                                               Tp* val) {
   if (!GetSysctlWithError(Name, val)) {
     std::cerr << "Failed to read sysctl field '" << Name << "'";
     return false;
@@ -208,8 +208,7 @@ BENCHMARK_MAYBE_UNUSED static bool GetSysctlWithError(std::string const& Name,
 }
 #endif
 
-
-static bool ReadFromFileImp(std::ifstream& in) { return in.good(); }
+bool ReadFromFileImp(std::ifstream& in) { return in.good(); }
 
 // Helper function for reading an int from a file. Returns true if successful
 // and the memory location pointed to by value is set to the value read.
