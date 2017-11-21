@@ -54,16 +54,16 @@
 namespace benchmark {
 namespace {
 
-static void PrintImp(std::ostream& out) { out << std::endl; }
+void PrintImp(std::ostream& out) { out << std::endl; }
 
 template <class First, class... Rest>
-static void PrintImp(std::ostream& out, First&& f, Rest&&... rest) {
+void PrintImp(std::ostream& out, First&& f, Rest&&... rest) {
   out << std::forward<First>(f);
   PrintImp(out, std::forward<Rest>(rest)...);
 }
 
 template <class... Args>
-BENCHMARK_NORETURN static void PrintErrorAndDie(Args&&... args) {
+BENCHMARK_NORETURN void PrintErrorAndDie(Args&&... args) {
   PrintImp(std::cerr, std::forward<Args>(args)...);
   std::exit(1);
 }
@@ -228,6 +228,9 @@ bool ReadFromFile(std::string const& fname, Args*... args) {
 }
 
 bool CpuScalingEnabled(int num_cpus) {
+  // We don't have a valid CPU count, so don't even bother.
+  if (num_cpus <= 0)
+    return false;
 #ifndef BENCHMARK_OS_WINDOWS
   // On Linux, the CPUfreq subsystem exposes CPU information as files on the
   // local file system. If reading the exported files fails, then we may not be
@@ -245,7 +248,7 @@ bool CpuScalingEnabled(int num_cpus) {
 }
 
 BENCHMARK_MAYBE_UNUSED
-static std::vector<CPUInfo::CacheInfo> GetCacheSizesFromKVFS() {
+std::vector<CPUInfo::CacheInfo> GetCacheSizesFromKVFS() {
   std::vector<CPUInfo::CacheInfo> res;
   std::string dir = "/sys/devices/system/cpu/cpu0/cache/";
   int Idx = 0;
@@ -279,8 +282,9 @@ static std::vector<CPUInfo::CacheInfo> GetCacheSizesFromKVFS() {
 
   return res;
 }
+
 #ifdef BENCHMARK_OS_MACOSX
-static std::vector<CPUInfo::CacheInfo> GetCacheSizesMacOSX() {
+std::vector<CPUInfo::CacheInfo> GetCacheSizesMacOSX() {
   std::vector<CPUInfo::CacheInfo> res;
   struct {
     std::string name;
@@ -303,7 +307,7 @@ static std::vector<CPUInfo::CacheInfo> GetCacheSizesMacOSX() {
 }
 #endif
 
-static std::vector<CPUInfo::CacheInfo> GetCacheSizes() {
+std::vector<CPUInfo::CacheInfo> GetCacheSizes() {
 #ifdef BENCHMARK_OS_MACOSX
   return GetCacheSizesMacOSX();
 #else
@@ -311,7 +315,7 @@ static std::vector<CPUInfo::CacheInfo> GetCacheSizes() {
 #endif
 }
 
-static int GetNumCPUs() {
+int GetNumCPUs() {
 #ifdef BENCHMARK_HAS_SYSCTL
   int NumCPU = -1;
   if (!GetSysctl("hw.ncpu", &NumCPU)) {
@@ -370,7 +374,7 @@ static int GetNumCPUs() {
 #endif
 }
 
-static double GetCPUCyclesPerSecond() {
+double GetCPUCyclesPerSecond() {
 #if defined BENCHMARK_OS_LINUX || defined BENCHMARK_OS_CYGWIN
   long freq;
 
@@ -491,19 +495,18 @@ static double GetCPUCyclesPerSecond() {
   return static_cast<double>(cycleclock::Now() - start_ticks);
 }
 
-CPUInfo& InitializeSystemInfo(CPUInfo& info) {
+CPUInfo& InitializeCPUInfo(CPUInfo& info) {
   info.num_cpus = GetNumCPUs();
   info.caches = GetCacheSizes();
-  info.scaling_enabled =
-      info.num_cpus != -1 ? CpuScalingEnabled(info.num_cpus) : false;
   info.cycles_per_second = GetCPUCyclesPerSecond();
+  info.scaling_enabled = CpuScalingEnabled(info.num_cpus);
   return info;
 }
 
 }  // end namespace
 
 const CPUInfo& CPUInfo::Get() {
-  static const CPUInfo& inited_info = InitializeSystemInfo(GetUninitialized());
+  static const CPUInfo& inited_info = InitializeCPUInfo(GetUninitialized());
   return inited_info;
 }
 
