@@ -1160,6 +1160,7 @@ struct CPUInfo {
     int level;
     int size;
   };
+
   double cycles_per_second;
   int num_cpus;
   bool scaling_enabled;
@@ -1168,7 +1169,10 @@ struct CPUInfo {
   static const CPUInfo& Get();
 
  private:
-  CPUInfo();
+  static CPUInfo& GetUninitialized();
+
+  CPUInfo() : cycles_per_second(-1), num_cpus(-1), scaling_enabled(false) {}
+
   BENCHMARK_DISALLOW_COPY_AND_ASSIGN(CPUInfo);
 };
 

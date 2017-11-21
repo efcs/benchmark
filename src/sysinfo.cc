@@ -491,23 +491,25 @@ static double GetCPUCyclesPerSecond() {
   return static_cast<double>(cycleclock::Now() - start_ticks);
 }
 
-void InitializeSystemInfo(CPUInfo& info) {
+CPUInfo& InitializeSystemInfo(CPUInfo& info) {
   info.num_cpus = GetNumCPUs();
   info.caches = GetCacheSizes();
   info.scaling_enabled =
       info.num_cpus != -1 ? CpuScalingEnabled(info.num_cpus) : false;
   info.cycles_per_second = GetCPUCyclesPerSecond();
+  return info;
 }
 
 }  // end namespace
 
-CPUInfo::CPUInfo()
-    : cycles_per_second(-1), num_cpus(-1), scaling_enabled(false) {}
-
 const CPUInfo& CPUInfo::Get() {
-  static CPUInfo info;
-  static const CPUInfo& inited_info = (InitializeSystemInfo(info), info);
+  static const CPUInfo& inited_info = InitializeSystemInfo(GetUninitialized());
   return inited_info;
+}
+
+CPUInfo& CPUInfo::GetUninitialized() {
+  static CPUInfo info;
+  return info;
 }
 
 }  // end namespace benchmark
