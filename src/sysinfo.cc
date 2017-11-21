@@ -286,16 +286,76 @@ static std::vector<CPUInfo::CacheInfo> GetCacheSizes() {
 #endif
 }
 
+static int GetNumCPUs() {
+#ifdef BENCHMARK_HAS_SYSCTL
+  int NumCPU = -1;
+  if (!GetSysctl("hw.ncpu", &NumCPU)) {
+    fprintf(stderr, "%s\n", strerror(errno));
+    std::exit(EXIT_FAILURE);
+  }
+  return NumCPU;
+#elif defined(BENCHMARK_OS_WINDOWS)
+  SYSTEM_INFO sysinfo;
+  // Use memset as opposed to = {} to avoid GCC missing initializer false
+  // positives.
+  std::memset(&sysinfo, 0, sizeof(SYSTEM_INFO));
+  GetSystemInfo(&sysinfo);
+  return sysinfo.dwNumberOfProcessors;  // number of logical
+                                        // processors in the current
+                                        // group
+#else
+  int NumCPUs = -1;
+  int MaxID = -1;
+  std::ifstream f("/proc/cpuinfo");
+  if (!f.is_open()) {
+    std::cerr << "failed to open /proc/cpuinfo\n";
+    return -1;
+  }
+  const std::string Key = "processor";
+  std::string ln;
+  while (std::getline(f, ln)) {
+    if (ln.empty()) continue;
+    size_t SplitIdx = ln.find(':');
+    std::string value;
+    if (SplitIdx != std::string::npos) value = ln.substr(SplitIdx + 1);
+    if (ln.size() >= Key.size() && ln.compare(0, Key.size(), Key) == 0) {
+      NumCPUs++;
+      if (!value.empty()) {
+        int CurID = std::stoi(value);
+        MaxID = std::max(CurID, MaxID);
+      }
+    }
+  }
+  if (f.bad()) {
+    std::cerr << "Failure reading /proc/cpuinfo\n";
+    return -1;
+  }
+  if (!f.eof()) {
+    std::cerr << "Failed to read to end of /proc/cpuinfo\n";
+    return -1;
+  }
+  f.close();
+
+  if ((MaxID + 1) != NumCPUs) {
+    fprintf(stderr,
+            "CPU ID assignments in /proc/cpuinfo seem messed up."
+            " This is usually caused by a bad BIOS.\n");
+  }
+  return NumCPUs;
+#endif
+}
+
 void InitializeSystemInfo(CPUInfo& info) {
   // Roughly estimate the clock rate in case we can't deduce it later.
   constexpr int64_t estimate_time_ms = 1000;
   const int64_t start_ticks = cycleclock::Now();
   SleepForMilliseconds(estimate_time_ms);
   info.cycles_per_second = static_cast<double>(cycleclock::Now() - start_ticks);
-
+  info.num_cpus = GetNumCPUs();
   info.caches = GetCacheSizes();
+  info.scaling_enabled =
+      info.num_cpus != -1 ? CpuScalingEnabled(info.num_cpus) : false;
 #if defined BENCHMARK_OS_LINUX || defined BENCHMARK_OS_CYGWIN
-
   long freq;
 
   bool saw_mhz = false;
@@ -325,11 +385,8 @@ void InitializeSystemInfo(CPUInfo& info) {
     saw_mhz = true;
   }
 
-
   double bogo_clock = 1.0;
   bool saw_bogo = false;
-  long max_cpu_id = 0;
-  int num_cpus = 0;
 
   std::ifstream f("/proc/cpuinfo");
   if (!f.is_open()) {
@@ -366,16 +423,6 @@ void InitializeSystemInfo(CPUInfo& info) {
         bogo_clock = std::stod(value) * 1000000.0;
         if (bogo_clock > 0) saw_bogo = true;
       }
-    } else if (startsWithKey(ln, "processor", /*IgnoreCase*/ false)) {
-      // The above comparison is case-sensitive because ARM kernels often
-      // include a "Processor" ln that tells you about the CPU, distinct
-      // from the usual "processor" lns that give you CPU ids. No current
-      // Linux architecture is using "Processor" for CPU ids.
-      num_cpus++;  // count up every time we see an "processor :" entry
-      if (!value.empty()) {
-        const long cpu_id = std::stol(value);
-        if (max_cpu_id < cpu_id) max_cpu_id = cpu_id;
-      }
     }
   }
   if (f.bad()) {
@@ -395,16 +442,6 @@ void InitializeSystemInfo(CPUInfo& info) {
       info.cycles_per_second = bogo_clock;
     }
   }
-  if (num_cpus == 0) {
-    fprintf(stderr, "Failed to read num. CPUs correctly from /proc/cpuinfo\n");
-  } else {
-    if ((max_cpu_id + 1) != num_cpus) {
-      fprintf(stderr,
-              "CPU ID assignments in /proc/cpuinfo seem messed up."
-              " This is usually caused by a bad BIOS.\n");
-    }
-    info.num_cpus = num_cpus;
-  }
 
 #elif defined BENCHMARK_HAS_SYSCTL
   constexpr bool IsBSD =
@@ -413,11 +450,6 @@ void InitializeSystemInfo(CPUInfo& info) {
 #else
       false;
 #endif
-
-  if (!GetSysctl("hw.ncpu", &info.num_cpus)) {
-    fprintf(stderr, "%s\n", strerror(errno));
-    std::exit(EXIT_FAILURE);
-  }
 
   // FreeBSD notes
   // =============
@@ -452,18 +484,7 @@ void InitializeSystemInfo(CPUInfo& info) {
                       "~MHz", nullptr, &data, &data_size)))
     info.cycles_per_second =
         static_cast<double>((int64_t)data * (int64_t)(1000 * 1000));  // was mhz
-
-  SYSTEM_INFO sysinfo;
-  // Use memset as opposed to = {} to avoid GCC missing initializer false
-  // positives.
-  std::memset(&sysinfo, 0, sizeof(SYSTEM_INFO));
-  GetSystemInfo(&sysinfo);
-  info.num_cpus = sysinfo.dwNumberOfProcessors;  // number of logical
-                                                 // processors in the current
-                                                 // group
-
 #endif
-  info.scaling_enabled = CpuScalingEnabled(info.num_cpus);
 }
 
 }  // end namespace
