@@ -148,10 +148,8 @@ struct ValueUnion {
 #endif
 
 ValueUnion GetSysctlImp(std::string const& Name) {
-  size_t CurBuffSize = static_cast<size_t>(-1);
-  errno = 0;
-  sysctlbyname(Name.c_str(), nullptr, &CurBuffSize, nullptr, 0);
-  if (errno != ENOMEM)
+  size_t CurBuffSize = 0;
+  if (sysctlbyname(Name.c_str(), nullptr, &CurBuffSize, nullptr, 0) == -1)
     return ValueUnion();
 
   ValueUnion buff(CurBuffSize);
@@ -311,7 +309,7 @@ int GetNumCPUs() {
 #ifdef BENCHMARK_HAS_SYSCTL
   int NumCPU = -1;
   if (GetSysctl("hw.ncpu", &NumCPU)) return NumCPU;
-  fprintf(stderr, "%s\n", strerror(errno));
+  fprintf(stderr, "Err: %s\n", strerror(errno));
   std::exit(EXIT_FAILURE);
 #elif defined(BENCHMARK_OS_WINDOWS)
   SYSTEM_INFO sysinfo;
