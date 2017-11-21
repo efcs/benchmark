@@ -1154,6 +1154,24 @@ class Fixture : public internal::Benchmark {
 
 namespace benchmark {
 
+struct CPUInfo {
+  struct CacheInfo {
+    std::string type;
+    int level;
+    int size;
+  };
+  double cycles_per_second;
+  int num_cpus;
+  bool scaling_enabled;
+  std::vector<CacheInfo> caches;
+
+  static const CPUInfo& Get();
+
+ private:
+  CPUInfo();
+  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(CPUInfo);
+};
+
 // Interface for custom benchmark result printers.
 // By default, benchmark reports are printed to stdout. However an application
 // can control the destination of the reports by calling
@@ -1162,12 +1180,11 @@ namespace benchmark {
 class BenchmarkReporter {
  public:
   struct Context {
-    int num_cpus;
-    double mhz_per_cpu;
-    bool cpu_scaling_enabled;
-
+    CPUInfo const& cpu_info;
     // The number of chars in the longest benchmark name.
     size_t name_field_width;
+
+    Context();
   };
 
   struct Run {
@@ -1279,7 +1296,7 @@ class BenchmarkReporter {
   // Write a human readable string to 'out' representing the specified
   // 'context'.
   // REQUIRES: 'out' is non-null.
-  static void PrintBasicContext(std::ostream* out, Context const& context);
+  static void PrintBasicContext(std::ostream* out, const Context& ctx);
 
  private:
   std::ostream* output_stream_;

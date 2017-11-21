@@ -39,6 +39,8 @@
   #endif
 #elif defined(__FreeBSD__)
 #define BENCHMARK_OS_FREEBSD 1
+#elif defined(__NetBSD__)
+#define BENCHMARK_OS_NETBSD 1
 #elif defined(__linux__)
 #define BENCHMARK_OS_LINUX 1
 #elif defined(__native_client__)
@@ -52,6 +54,12 @@
 #if !__has_feature(cxx_exceptions) && !defined(__cpp_exceptions) \
      && !defined(__EXCEPTIONS)
 #define BENCHMARK_HAS_NO_EXCEPTIONS
+#endif
+
+#if defined(COMPILER_CLANG) || defined(COMPILER_GCC)
+#define BENCHMARK_MAYBE_UNUSED __attribute__((unused))
+#else
+#define BENCHMARK_MAYBE_UNUSED
 #endif
 
 #endif  // BENCHMARK_INTERNAL_MACROS_H_
