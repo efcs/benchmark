@@ -28,8 +28,6 @@
     defined BENCHMARK_OS_NETBSD
 #define BENCHMARK_HAS_SYSCTL
 #include <sys/sysctl.h>
-#elif defined BENCHMARK_OS_LINUX
-#define BENCHMARK_HAS_PROC_FS
 #endif
 #endif
 
@@ -162,41 +160,7 @@ BENCHMARK_MAYBE_UNUSED static bool GetSysctl(std::string const& Name, Tp* Out) {
   *Out = static_cast<Tp>(Buff->getAsUnsigned());
   return true;
 }
-#elif defined BENCHMARK_HAS_PROC_FS
-BENCHMARK_MAYBE_UNUSED
-static bool GetSysctl(std::string const& Name, std::string* Out) {
-  Out->clear();
-  std::string Path = "/proc/sys/" + Name;
-  std::for_each(Path.begin(), Path.end(), [](char& ch) {
-    if (ch == '.') ch = '/';
-  });
-  std::ifstream f(Path.c_str());
-  if (!f.is_open()) return false;
-  using It = std::istreambuf_iterator<char>;
-  std::string Res((It(f)), It{});
-  if (f.bad()) return false;
-  (*Out) = std::move(Res);
-  return true;
-}
 
-template <class Tp,
-          class = typename std::enable_if<std::is_integral<Tp>::value>::type>
-BENCHMARK_MAYBE_UNUSED static bool GetSysctl(std::string const& Name, Tp* Val) {
-  *Val = 0;
-  std::string tmp;
-  if (!GetSysctl(Name, &tmp)) return false;
-  if (std::is_signed<Tp>::value) {
-    long long tmp_val = std::stoll(tmp);
-    *Val = static_cast<Tp>(tmp_val);
-  } else {
-    unsigned long long tmp_val = std::stoull(tmp);
-    *Val = static_cast<Tp>(tmp_val);
-  }
-  return true;
-}
-#endif
-
-#if defined(BENCHMARK_HAS_SYSCTL) || defined(BENCHMARK_HAS_PROC_FS)
 BENCHMARK_MAYBE_UNUSED
 static bool GetSysctl(std::string const& Name, std::vector<std::string>* Vals) {
   std::string tmp;
@@ -218,17 +182,6 @@ BENCHMARK_MAYBE_UNUSED static bool GetSysctlWithError(std::string const& Name,
 }
 #endif
 
-#if !defined BENCHMARK_OS_MACOSX
-const int64_t estimate_time_ms = 1000;
-
-// Helper function estimates cycles/sec by observing cycles elapsed during
-// sleep(). Using small sleep time decreases accuracy significantly.
-int64_t EstimateCyclesPerSecond() {
-  const int64_t start_ticks = cycleclock::Now();
-  SleepForMilliseconds(estimate_time_ms);
-  return cycleclock::Now() - start_ticks;
-}
-#endif
 
 static bool ReadFromFileImp(std::ifstream& in) { return in.good(); }
 
@@ -248,18 +201,6 @@ bool ReadFromFile(std::string const& fname, Args*... args) {
   if (!f.is_open()) return false;
   return ReadFromFileImp(f, args...);
 }
-
-#if defined BENCHMARK_OS_LINUX || defined BENCHMARK_OS_CYGWIN
-
-static bool startsWithKey(std::string const& Value, std::string const& Key,
-                          bool IgnoreCase = true) {
-  if (Key.size() > Value.size()) return false;
-  auto Cmp = [&](char X, char Y) {
-    return IgnoreCase ? std::tolower(X) == std::tolower(Y) : X == Y;
-  };
-  return std::equal(Key.begin(), Key.end(), Value.begin(), Cmp);
-}
-#endif
 
 bool CpuScalingEnabled(int num_cpus) {
 #ifndef BENCHMARK_OS_WINDOWS
@@ -346,6 +287,13 @@ static std::vector<CPUInfo::CacheInfo> GetCacheSizes() {
 }
 
 void InitializeSystemInfo(CPUInfo& info) {
+  // Roughly estimate the clock rate in case we can't deduce it later.
+  constexpr int64_t estimate_time_ms = 1000;
+  const int64_t start_ticks = cycleclock::Now();
+  SleepForMilliseconds(estimate_time_ms);
+  info.cycles_per_second = static_cast<double>(cycleclock::Now() - start_ticks);
+
+  info.caches = GetCacheSizes();
 #if defined BENCHMARK_OS_LINUX || defined BENCHMARK_OS_CYGWIN
 
   long freq;
@@ -386,11 +334,17 @@ void InitializeSystemInfo(CPUInfo& info) {
   std::ifstream f("/proc/cpuinfo");
   if (!f.is_open()) {
     std::cerr << "failed to open /proc/cpuinfo\n";
-    if (!saw_mhz) {
-      info.cycles_per_second = static_cast<double>(EstimateCyclesPerSecond());
-    }
     return;
   }
+
+  auto startsWithKey = [](std::string const& Value, std::string const& Key,
+                          bool IgnoreCase) {
+    if (Key.size() > Value.size()) return false;
+    auto Cmp = [&](char X, char Y) {
+      return IgnoreCase ? std::tolower(X) == std::tolower(Y) : X == Y;
+    };
+    return std::equal(Key.begin(), Key.end(), Value.begin(), Cmp);
+  };
 
   std::string ln;
   while (std::getline(f, ln)) {
@@ -401,12 +355,12 @@ void InitializeSystemInfo(CPUInfo& info) {
     // When parsing the "cpu MHz" and "bogomips" (fallback) entries, we only
     // accept postive values. Some environments (virtual machines) report zero,
     // which would cause infinite looping in WallTime_Init.
-    if (!saw_mhz && startsWithKey(ln, "cpu MHz")) {
+    if (!saw_mhz && startsWithKey(ln, "cpu MHz", /*IgnoreCase*/ true)) {
       if (!value.empty()) {
         info.cycles_per_second = std::stod(value) * 1000000.0;
         if (info.cycles_per_second > 0) saw_mhz = true;
       }
-    } else if (startsWithKey(ln, "bogomips")) {
+    } else if (startsWithKey(ln, "bogomips", /*IgnoreCase*/ true)) {
       ;
       if (!value.empty()) {
         bogo_clock = std::stod(value) * 1000000.0;
@@ -439,9 +393,6 @@ void InitializeSystemInfo(CPUInfo& info) {
       // If we didn't find anything better, we'll use bogomips, but
       // we're not happy about it.
       info.cycles_per_second = bogo_clock;
-    } else {
-      // If we don't even have bogomips, we'll use the slow estimation.
-      info.cycles_per_second = static_cast<double>(EstimateCyclesPerSecond());
     }
   }
   if (num_cpus == 0) {
@@ -455,7 +406,19 @@ void InitializeSystemInfo(CPUInfo& info) {
     info.num_cpus = num_cpus;
   }
 
-#elif defined BENCHMARK_OS_FREEBSD || defined BENCHMARK_OS_NETBSD
+#elif defined BENCHMARK_HAS_SYSCTL
+  constexpr bool IsBSD =
+#if defined(BENCHMARK_OS_FREEBSD) || defined(BENCHMARK_OS_OPENBSD)
+      true;
+#else
+      false;
+#endif
+
+  if (!GetSysctl("hw.ncpu", &info.num_cpus)) {
+    fprintf(stderr, "%s\n", strerror(errno));
+    std::exit(EXIT_FAILURE);
+  }
+
   // FreeBSD notes
   // =============
   // For this sysctl to work, the machine must be configured without
@@ -469,18 +432,13 @@ void InitializeSystemInfo(CPUInfo& info) {
   // To FreeBSD 6.3 (it's the same in 6-STABLE):
   //  http://fxr.watson.org/fxr/source/i386/i386/tsc.c?v=RELENG6#L131
   //  139         error = sysctl_handle_int(oidp, &freq, sizeof(freq), req);
+  std::string FreqStr = IsBSD ? "machdep.tsc_freq" : "hw.cpufrequency";
   unsigned long long hz = 0;
-  if (!GetSysctl("machdep.tsc_freq", &hz)) {
+  if (!GetSysctl(FreqStr, &hz)) {
     fprintf(stderr, "Unable to determine clock rate from sysctl: %s: %s\n",
-            sysctl_path, strerror(errno));
-    info.cycles_per_second = static_cast<double>(EstimateCyclesPerSecond());
+            FreqStr.c_str(), strerror(errno));
   } else {
     info.cycles_per_second = hz;
-  }
-
-  if (!GetSysctl("hw.ncpu", &info.num_cpus)) {
-    fprintf(stderr, "%s\n", strerror(errno));
-    std::exit(EXIT_FAILURE);
   }
 
 #elif defined BENCHMARK_OS_WINDOWS
@@ -494,8 +452,6 @@ void InitializeSystemInfo(CPUInfo& info) {
                       "~MHz", nullptr, &data, &data_size)))
     info.cycles_per_second =
         static_cast<double>((int64_t)data * (int64_t)(1000 * 1000));  // was mhz
-  else
-    info.cycles_per_second = static_cast<double>(EstimateCyclesPerSecond());
 
   SYSTEM_INFO sysinfo;
   // Use memset as opposed to = {} to avoid GCC missing initializer false
@@ -506,29 +462,8 @@ void InitializeSystemInfo(CPUInfo& info) {
                                                  // processors in the current
                                                  // group
 
-#elif defined BENCHMARK_OS_MACOSX
-  if (!GetSysctl("hw.ncpu", &info.num_cpus)) {
-    fprintf(stderr, "%s\n", strerror(errno));
-    std::exit(EXIT_FAILURE);
-  }
-  info.cycles_per_second = 0;
-  int64_t cpu_freq = 0;
-  if (!GetSysctl("hw.cpufrequency", &cpu_freq)) {
-#if defined BENCHMARK_OS_IOS
-    fprintf(stderr, "CPU frequency cannot be detected. \n");
-#else
-    fprintf(stderr, "%s\n", strerror(errno));
-    std::exit(EXIT_FAILURE);
 #endif
-  }
-  info.cycles_per_second = cpu_freq;
-#else
-  // Generic cycles per second counter
-  info.cycles_per_second = static_cast<double>(EstimateCyclesPerSecond());
-#endif
-
   info.scaling_enabled = CpuScalingEnabled(info.num_cpus);
-  info.caches = GetCacheSizes();
 }
 
 }  // end namespace
