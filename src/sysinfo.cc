@@ -310,11 +310,9 @@ std::vector<CPUInfo::CacheInfo> GetCacheSizes() {
 int GetNumCPUs() {
 #ifdef BENCHMARK_HAS_SYSCTL
   int NumCPU = -1;
-  if (!GetSysctl("hw.ncpu", &NumCPU)) {
-    fprintf(stderr, "%s\n", strerror(errno));
-    std::exit(EXIT_FAILURE);
-  }
-  return NumCPU;
+  if (GetSysctl("hw.ncpu", &NumCPU)) return NumCPU;
+  fprintf(stderr, "%s\n", strerror(errno));
+  std::exit(EXIT_FAILURE);
 #elif defined(BENCHMARK_OS_WINDOWS)
   SYSTEM_INFO sysinfo;
   // Use memset as opposed to = {} to avoid GCC missing initializer false
