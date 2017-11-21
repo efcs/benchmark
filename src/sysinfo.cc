@@ -87,6 +87,9 @@ struct ValueUnion {
     int64_t int64_value;
     uint32_t uint32_value;
     uint64_t uint64_value;
+    // FIXME (Maybe?): This is a C11 flexible array member, and not technically
+    // C++. However, all compilers support it and it allows for correct aliasing
+    // of union members from bytes.
     char string_value[];
   };
 
@@ -345,20 +348,9 @@ static int GetNumCPUs() {
 #endif
 }
 
-void InitializeSystemInfo(CPUInfo& info) {
-  // Roughly estimate the clock rate in case we can't deduce it later.
-  constexpr int64_t estimate_time_ms = 1000;
-  const int64_t start_ticks = cycleclock::Now();
-  SleepForMilliseconds(estimate_time_ms);
-  info.cycles_per_second = static_cast<double>(cycleclock::Now() - start_ticks);
-  info.num_cpus = GetNumCPUs();
-  info.caches = GetCacheSizes();
-  info.scaling_enabled =
-      info.num_cpus != -1 ? CpuScalingEnabled(info.num_cpus) : false;
+static double GetCPUCyclesPerSecond() {
 #if defined BENCHMARK_OS_LINUX || defined BENCHMARK_OS_CYGWIN
   long freq;
-
-  bool saw_mhz = false;
 
   // If the kernel is exporting the tsc frequency use that. There are issues
   // where cpuinfo_max_freq cannot be relied on because the BIOS may be
@@ -366,39 +358,29 @@ void InitializeSystemInfo(CPUInfo& info) {
   // processor in a new mode (turbo mode). Essentially, those frequencies
   // cannot always be relied upon. The same reasons apply to /proc/cpuinfo as
   // well.
-  if (!saw_mhz &&
-      ReadFromFile("/sys/devices/system/cpu/cpu0/tsc_freq_khz", &freq)) {
+  if (ReadFromFile("/sys/devices/system/cpu/cpu0/tsc_freq_khz", &freq)
+      // If CPU scaling is in effect, we want to use the *maximum* frequency,
+      // not whatever CPU speed some random processor happens to be using now.
+      || ReadFromFile("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
+                      &freq)) {
     // The value is in kHz (as the file name suggests).  For example, on a
     // 2GHz warpstation, the file contains the value "2000000".
-    info.cycles_per_second = freq * 1000.0;
-    saw_mhz = true;
+    return freq * 1000.0;
   }
 
-  // If CPU scaling is in effect, we want to use the *maximum* frequency,
-  // not whatever CPU speed some random processor happens to be using now.
-  if (!saw_mhz &&
-      ReadFromFile("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
-                   &freq)) {
-    // The value is in kHz.  For example, on a 2GHz warpstation, the file
-    // contains the value "2000000".
-    info.cycles_per_second = freq * 1000.0;
-    saw_mhz = true;
-  }
-
-  double bogo_clock = 1.0;
-  bool saw_bogo = false;
+  const double error_value = -1;
+  double bogo_clock = error_value;
 
   std::ifstream f("/proc/cpuinfo");
   if (!f.is_open()) {
     std::cerr << "failed to open /proc/cpuinfo\n";
-    return;
+    return error_value;
   }
 
-  auto startsWithKey = [](std::string const& Value, std::string const& Key,
-                          bool IgnoreCase) {
+  auto startsWithKey = [](std::string const& Value, std::string const& Key) {
     if (Key.size() > Value.size()) return false;
     auto Cmp = [&](char X, char Y) {
-      return IgnoreCase ? std::tolower(X) == std::tolower(Y) : X == Y;
+      return std::tolower(X) == std::tolower(Y);
     };
     return std::equal(Key.begin(), Key.end(), Value.begin(), Cmp);
   };
@@ -412,36 +394,31 @@ void InitializeSystemInfo(CPUInfo& info) {
     // When parsing the "cpu MHz" and "bogomips" (fallback) entries, we only
     // accept postive values. Some environments (virtual machines) report zero,
     // which would cause infinite looping in WallTime_Init.
-    if (!saw_mhz && startsWithKey(ln, "cpu MHz", /*IgnoreCase*/ true)) {
+    if (startsWithKey(ln, "cpu MHz")) {
       if (!value.empty()) {
-        info.cycles_per_second = std::stod(value) * 1000000.0;
-        if (info.cycles_per_second > 0) saw_mhz = true;
+        double cycles_per_second = std::stod(value) * 1000000.0;
+        if (cycles_per_second > 0) return cycles_per_second;
       }
-    } else if (startsWithKey(ln, "bogomips", /*IgnoreCase*/ true)) {
-      ;
+    } else if (startsWithKey(ln, "bogomips")) {
       if (!value.empty()) {
         bogo_clock = std::stod(value) * 1000000.0;
-        if (bogo_clock > 0) saw_bogo = true;
+        if (bogo_clock < 0.0) bogo_clock = error_value;
       }
     }
   }
   if (f.bad()) {
     std::cerr << "Failure reading /proc/cpuinfo\n";
-    return;
+    return error_value;
   }
   if (!f.eof()) {
     std::cerr << "Failed to read to end of /proc/cpuinfo\n";
-    return;
+    return error_value;
   }
   f.close();
 
-  if (!saw_mhz) {
-    if (saw_bogo) {
-      // If we didn't find anything better, we'll use bogomips, but
-      // we're not happy about it.
-      info.cycles_per_second = bogo_clock;
-    }
-  }
+  // If we didn't find anything better, we'll use bogomips, but
+  // we're not happy about it.
+  return bogo_clock;
 
 #elif defined BENCHMARK_HAS_SYSCTL
   constexpr bool IsBSD =
@@ -485,12 +462,25 @@ void InitializeSystemInfo(CPUInfo& info) {
     info.cycles_per_second =
         static_cast<double>((int64_t)data * (int64_t)(1000 * 1000));  // was mhz
 #endif
+  // If we've fallen through, attempt to roughly estimate the CPU clock rate.
+  const int estimate_time_ms = 1000;
+  const auto start_ticks = cycleclock::Now();
+  SleepForMilliseconds(estimate_time_ms);
+  return static_cast<double>(cycleclock::Now() - start_ticks);
+}
+
+void InitializeSystemInfo(CPUInfo& info) {
+  info.num_cpus = GetNumCPUs();
+  info.caches = GetCacheSizes();
+  info.scaling_enabled =
+      info.num_cpus != -1 ? CpuScalingEnabled(info.num_cpus) : false;
+  info.cycles_per_second = GetCPUCyclesPerSecond();
 }
 
 }  // end namespace
 
 CPUInfo::CPUInfo()
-    : cycles_per_second(1.0), num_cpus(1), scaling_enabled(false) {}
+    : cycles_per_second(-1), num_cpus(-1), scaling_enabled(false) {}
 
 const CPUInfo& CPUInfo::Get() {
   static CPUInfo info;
