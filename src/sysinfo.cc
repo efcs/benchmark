@@ -42,10 +42,8 @@
 #include <iterator>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <sstream>
 
-#include "arraysize.h"
 #include "check.h"
 #include "cycleclock.h"
 #include "internal_macros.h"
@@ -76,73 +74,98 @@ BENCHMARK_NORETURN static void PrintErrorAndDie(Args&&... args) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 #endif
-struct ValueUnion;
 
-using ValueUnionPtr = std::unique_ptr<ValueUnion, decltype(&std::free)>;
-
+/// ValueUnion - A type used to correctly alias the byte-for-byte output of
+/// `sysctl` with the result type it's to be interpreted as.
 struct ValueUnion {
+  // The size of the union member + its trailing array size.
   size_t Size;
-  union {
-    int32_t int32_value;
-    int64_t int64_value;
+  union DataT {
+    char dummy;
     uint32_t uint32_value;
     uint64_t uint64_value;
     // FIXME (Maybe?): This is a C11 flexible array member, and not technically
     // C++. However, all compilers support it and it allows for correct aliasing
     // of union members from bytes.
-    char string_value[];
+    char bytes[];
   };
+  DataT *data;
 
-  char* data() { return string_value; }
+  char* data() const { return data->bytes; }
 
-  std::string getAsString() const { return std::string(string_value); }
+  std::string getAsString() const { return std::string(data()); }
 
-  long long getAsInteger() {
-    if (Size == sizeof(int32_value))
-      return int32_value;
-    else if (Size == sizeof(int64_value))
-      return int64_value;
+  long long getAsInteger() const {
+    if (Size == sizeof(data->uint32_value))
+      return static_cast<int32_t>(data->uint32_value);
+    else if (Size == sizeof(data->uint64_value))
+      return static_cast<int64_t>(data->uint64_value);
     CHECK(false) << "invalid size";
     return 0;
   }
 
-  unsigned long long getAsUnsigned() {
-    if (Size == sizeof(uint32_value))
-      return uint32_value;
-    else if (Size == sizeof(uint64_value))
-      return uint64_value;
+  unsigned long long getAsUnsigned() const {
+    if (Size == sizeof(data->uint32_value))
+      return data->uint32_value;
+    else if (Size == sizeof(data->uint64_value))
+      return data->uint64_value;
     CHECK(false) << "invalid size";
     return 0;
   }
 
-  static ValueUnionPtr Create(size_t Size) {
-    const size_t NewSize = sizeof(ValueUnion) + Size;
-    const size_t UnionSize = std::max(sizeof(char*), sizeof(uint64_t)) + Size;
-    void* mem = std::malloc(NewSize);
-    ValueUnion* V = new (mem) ValueUnion(UnionSize);
-    ValueUnionPtr ptr(V, &std::free);
-    return ptr;
+  static ValueUnion Create(size_t BuffSize) {.
+    const size_t UnionSize = sizeof(DataT) + BuffSize;
+    return ValueUnion(::new (std::malloc(UnionSize)) DataT(),UnionSize);
   }
 
- private:
-  ValueUnion(size_t S) : Size(S), int32_value(0) {}
+  ValueUnion(ValueUnion&& other) : Size(other.Size), data(other.data)  {
+    other.data = nullptr;
+    other.Size = 0;
+  }
+
+  ~ValueUnion() {
+    clear();
+  }
+
+  explicit operator bool() const {
+    return !empty();
+  }
+
+  bool empty() const {
+    return data == nullptr;
+  }
+
+  void clear() {
+    if (data) {
+      std::free(data);
+      data = nullptr;
+    }
+    Size = 0;
+  }
+
+  ValueUnion() : Size(0), data(nullptr) {}
+
+  explicit ValueUnion(size_t BuffSize)
+    : Size(sizeof(DataT) + BuffSize),
+      data(::new (std::malloc(Size)) DataT())
+  {}
 };
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
 
-static ValueUnionPtr GetSysctlImp(std::string const& Name) {
+static ValueUnion GetSysctlImp(std::string const& Name) {
   size_t CurBuffSize = static_cast<size_t>(-1);
-  int res = sysctlbyname(Name.c_str(), nullptr, &CurBuffSize, nullptr, 0);
-  ((void)res);
-  CHECK_EQ(res, -1);
+  errno = 0;
+  sysctlbyname(Name.c_str(), nullptr, &CurBuffSize, nullptr, 0);
+  if (errno != ENOMEM)
+    return ValueUnion();
 
-  ValueUnionPtr buff = ValueUnion::Create(CurBuffSize);
-  if (sysctlbyname(Name.c_str(), buff->data(), &buff->Size, nullptr, 0) == 0)
+  ValueUnion buff(CurBuffSize);
+  if (sysctlbyname(Name.c_str(), buff.data(), &buff.Size, nullptr, 0) == 0)
     return buff;
-  buff.reset();
-  return buff;
+  return ValueUnion();
 }
 
 BENCHMARK_MAYBE_UNUSED
@@ -150,7 +173,7 @@ static bool GetSysctl(std::string const& Name, std::string* Out) {
   Out->clear();
   auto Buff = GetSysctlImp(Name);
   if (!Buff) return false;
-  Out->assign(Buff->data());
+  Out->assign(Buff.data());
   return true;
 }
 
@@ -160,7 +183,7 @@ BENCHMARK_MAYBE_UNUSED static bool GetSysctl(std::string const& Name, Tp* Out) {
   *Out = 0;
   auto Buff = GetSysctlImp(Name);
   if (!Buff) return false;
-  *Out = static_cast<Tp>(Buff->getAsUnsigned());
+  *Out = static_cast<Tp>(Buff.getAsUnsigned());
   return true;
 }
 
