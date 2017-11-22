@@ -60,13 +60,10 @@ inline nanoseconds FromTimeSpec(TimeSpec const& TS) {
 }
 
 // Return the CPU usage of the current process
-double ProcessCPUUsage();
-
-// Return the CPU usage of the children of the current process
-double ChildrenCPUUsage();
+nanoseconds ProcessCPUUsage();
 
 // Return the CPU usage of the current thread
-double ThreadCPUUsage();
+nanoseconds ThreadCPUUsage();
 
 using FPSeconds = std::chrono::duration<double, std::ratio<1>>;
 using FPNanoSeconds = std::chrono::duration<double, std::nano>;
@@ -79,10 +76,7 @@ class ThreadCPUClock {
   typedef std::chrono::time_point<ThreadCPUClock, duration> time_point;
   static constexpr const bool is_steady = true;
 
-  static time_point now() noexcept {
-    FPSeconds dur(ThreadCPUUsage());
-    return time_point(duration_cast<duration>(dur));
-  }
+  static time_point now() noexcept { return time_point(ThreadCPUUsage()); }
 };
 
 #if defined(HAVE_STEADY_CLOCK)

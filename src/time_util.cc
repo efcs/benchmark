@@ -63,36 +63,37 @@ namespace benchmark {
 
 namespace {
 #if defined(BENCHMARK_OS_WINDOWS)
-double MakeTime(FILETIME const& kernel_time, FILETIME const& user_time) {
+nanoseconds MakeTime(FILETIME const& kernel_time, FILETIME const& user_time) {
   ULARGE_INTEGER kernel;
   ULARGE_INTEGER user;
   kernel.HighPart = kernel_time.dwHighDateTime;
   kernel.LowPart = kernel_time.dwLowDateTime;
   user.HighPart = user_time.dwHighDateTime;
   user.LowPart = user_time.dwLowDateTime;
-  return (static_cast<double>(kernel.QuadPart) +
-          static_cast<double>(user.QuadPart)) *
-         1e-7;
+  using WeirdDurT = duration<nanoseconds::rep, std::ratio<1, 10000000>>;
+  WeirdDurT KernDur(kernel.QuadPart);
+  WeirdDurT UserDur(user.QuadPart);
+  return duration_cast<nanoseconds>(KernDur + UserDur);
 }
 #else
-double MakeTime(struct rusage const& ru) {
-  return (static_cast<double>(ru.ru_utime.tv_sec) +
-          static_cast<double>(ru.ru_utime.tv_usec) * 1e-6 +
-          static_cast<double>(ru.ru_stime.tv_sec) +
-          static_cast<double>(ru.ru_stime.tv_usec) * 1e-6);
+nanoseconds MakeTime(struct rusage const& ru) {
+  auto dur = seconds(ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) +
+             microseconds(ru.ru_utime.tv_usec + ru.ru_stime.tv_usec);
+  return duration_cast<nanoseconds>(dur);
 }
 #endif
 #if defined(BENCHMARK_OS_MACOSX)
-double MakeTime(thread_basic_info_data_t const& info) {
-  return (static_cast<double>(info.user_time.seconds) +
-          static_cast<double>(info.user_time.microseconds) * 1e-6 +
-          static_cast<double>(info.system_time.seconds) +
-          static_cast<double>(info.system_time.microseconds) * 1e-6);
+nanoseconds MakeTime(thread_basic_info_data_t const& info) {
+  auto dur =
+      seconds(info.user_time.seconds + info.system_time.seconds) +
+      microseconds(info.user_time.microseconds + info.system_time.microseconds);
+  return duration_cast<nanoseconds>(dur);
 }
 #endif
 #if defined(CLOCK_PROCESS_CPUTIME_ID) || defined(CLOCK_THREAD_CPUTIME_ID)
-double MakeTime(struct timespec const& ts) {
-  return ts.tv_sec + (static_cast<double>(ts.tv_nsec) * 1e-9);
+nanoseconds MakeTime(struct timespec const& ts) {
+  auto dur = seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec);
+  return duration_cast<nanoseconds>(dur);
 }
 #endif
 
@@ -103,7 +104,7 @@ BENCHMARK_NORETURN static void DiagnoseAndExit(const char* msg) {
 
 }  // end namespace
 
-double ProcessCPUUsage() {
+nanoseconds ProcessCPUUsage() {
 #if defined(BENCHMARK_OS_WINDOWS)
   HANDLE proc = GetCurrentProcess();
   FILETIME creation_time;
@@ -134,7 +135,7 @@ double ProcessCPUUsage() {
 #endif
 }
 
-double ThreadCPUUsage() {
+nanoseconds ThreadCPUUsage() {
 #if defined(BENCHMARK_OS_WINDOWS)
   HANDLE this_thread = GetCurrentThread();
   FILETIME creation_time;

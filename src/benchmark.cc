@@ -337,17 +337,17 @@ std::vector<BenchmarkReporter::Run> RunBenchmark(
               << results.real_time_used.count() << "\n";
 
       // Base decisions off of real time if requested by this benchmark.
-      FPSeconds secs(results.cpu_time_used);
+      nanoseconds secs(results.cpu_time_used);
       if (b.use_manual_time) {
-        secs = FPSeconds(results.manual_time_used);
+        secs = duration_cast<nanoseconds>(FPSeconds(results.manual_time_used));
       } else if (b.use_real_time) {
-        secs = duration_cast<FPSeconds>(results.real_time_used);
+        secs = results.real_time_used;
       }
 
-      const FPSeconds min_time = !IsZero(b.min_time)
-                                     ? FPSeconds(b.min_time)
-                                     : FPSeconds(FLAGS_benchmark_min_time);
-
+      const FPSeconds min_time_fp = !IsZero(b.min_time)
+                                        ? FPSeconds(b.min_time)
+                                        : FPSeconds(FLAGS_benchmark_min_time);
+      nanoseconds min_time(duration_cast<nanoseconds>(min_time_fp));
       // Determine if this run should be reported; Either it has
       // run for a sufficient amount of time or because an error was reported.
       const bool should_report =
@@ -373,7 +373,7 @@ std::vector<BenchmarkReporter::Run> RunBenchmark(
       // See how much iterations should be increased by
       // Note: Avoid division by zero with max(secs, 1ns).
       double multiplier =
-          (min_time.count() * 1.4) / std::max(secs.count(), 1e-9);
+          (min_time.count() * 1.4) / std::max<int64_t>(secs.count(), 1);
       // If our last run was at least 10% of FLAGS_benchmark_min_time then we
       // use the multiplier directly. Otherwise we use at most 10 times
       // expansion.
