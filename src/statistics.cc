@@ -17,11 +17,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <string>
 #include <vector>
-#include <numeric>
 #include "check.h"
 #include "statistics.h"
+#include "time_util.h"
 
 namespace benchmark {
 
@@ -124,8 +125,10 @@ std::vector<BenchmarkReporter::Run> ComputeStats(
     CHECK_EQ(reports[0].benchmark_name, run.benchmark_name);
     CHECK_EQ(run_iterations, run.iterations);
     if (run.error_occurred) continue;
-    real_accumulated_time_stat.emplace_back(run.real_accumulated_time);
-    cpu_accumulated_time_stat.emplace_back(run.cpu_accumulated_time);
+    real_accumulated_time_stat.emplace_back(
+        duration_cast<FPSeconds>(run.real_accumulated_time).count());
+    cpu_accumulated_time_stat.emplace_back(
+        duration_cast<FPSeconds>(run.cpu_accumulated_time).count());
     items_per_second_stat.emplace_back(run.items_per_second);
     bytes_per_second_stat.emplace_back(run.bytes_per_second);
     // user counters
@@ -152,8 +155,10 @@ std::vector<BenchmarkReporter::Run> ComputeStats(
     data.report_label = report_label;
     data.iterations = run_iterations;
 
-    data.real_accumulated_time = Stat.compute_(real_accumulated_time_stat);
-    data.cpu_accumulated_time = Stat.compute_(cpu_accumulated_time_stat);
+    data.real_accumulated_time = duration_cast<nanoseconds>(
+        FPSeconds(Stat.compute_(real_accumulated_time_stat)));
+    data.cpu_accumulated_time = duration_cast<nanoseconds>(
+        FPSeconds(Stat.compute_(cpu_accumulated_time_stat)));
     data.bytes_per_second = Stat.compute_(bytes_per_second_stat);
     data.items_per_second = Stat.compute_(items_per_second_stat);
 

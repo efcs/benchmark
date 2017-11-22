@@ -164,10 +164,14 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #ifndef BENCHMARK_BENCHMARK_H_
 #define BENCHMARK_BENCHMARK_H_
 
+#include <ciso646>  // get configuration macros from standard library
 
 // The _MSVC_LANG check should detect Visual Studio 2015 Update 3 and newer.
 #if __cplusplus >= 201103L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201103L)
 #define BENCHMARK_HAS_CXX11
+#define BENCHMARK_HAS_CXX11_LIBRARY
+#elif defined(_LIBCPP_VERSION)
+#define BENCHMARK_HAS_CXX11_LIBRARY
 #endif
 
 #include <stdint.h>
@@ -184,6 +188,10 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #include <type_traits>
 #include <initializer_list>
 #include <utility>
+#endif
+
+#if defined(BENCHMARK_HAS_CXX11_LIBRARY)
+#include <chrono>
 #endif
 
 #if defined(_MSC_VER)
@@ -1154,6 +1162,8 @@ class Fixture : public internal::Benchmark {
 
 namespace benchmark {
 
+#ifdef BENCHMARK_HAS_CXX11
+
 struct CPUInfo {
   struct CacheInfo {
     std::string type;
@@ -1212,20 +1222,20 @@ class BenchmarkReporter {
 
     int64_t iterations;
     TimeUnit time_unit;
-    double real_accumulated_time;
-    double cpu_accumulated_time;
+    std::chrono::nanoseconds real_accumulated_time;
+    std::chrono::nanoseconds cpu_accumulated_time;
 
     // Return a value representing the real time per iteration in the unit
     // specified by 'time_unit'.
     // NOTE: If 'iterations' is zero the returned value represents the
     // accumulated time.
-    double GetAdjustedRealTime() const;
+    std::chrono::nanoseconds GetAdjustedRealTime() const;
 
     // Return a value representing the cpu time per iteration in the unit
     // specified by 'time_unit'.
     // NOTE: If 'iterations' is zero the returned value represents the
     // accumulated time.
-    double GetAdjustedCPUTime() const;
+    std::chrono::nanoseconds GetAdjustedCPUTime() const;
 
     // Zero if not set by benchmark.
     double bytes_per_second;
@@ -1357,6 +1367,8 @@ class CSVReporter : public BenchmarkReporter {
   bool printed_header_;
   std::set< std::string > user_counter_names_;
 };
+
+#endif  // BENCHMARK_HAS_CXX11
 
 inline const char* GetTimeUnitString(TimeUnit unit) {
   switch (unit) {

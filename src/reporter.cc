@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "benchmark/benchmark.h"
-#include "timers.h"
+#include "time_util.h"
 
 #include <cstdlib>
 
@@ -63,15 +63,15 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 
 BenchmarkReporter::Context::Context() : cpu_info(CPUInfo::Get()) {}
 
-double BenchmarkReporter::Run::GetAdjustedRealTime() const {
-  double new_time = real_accumulated_time * GetTimeUnitMultiplier(time_unit);
-  if (iterations != 0) new_time /= static_cast<double>(iterations);
+nanoseconds BenchmarkReporter::Run::GetAdjustedRealTime() const {
+  auto new_time = real_accumulated_time;
+  if (iterations != 0) new_time /= iterations;
   return new_time;
 }
 
-double BenchmarkReporter::Run::GetAdjustedCPUTime() const {
-  double new_time = cpu_accumulated_time * GetTimeUnitMultiplier(time_unit);
-  if (iterations != 0) new_time /= static_cast<double>(iterations);
+nanoseconds BenchmarkReporter::Run::GetAdjustedCPUTime() const {
+  auto new_time = cpu_accumulated_time;
+  if (iterations != 0) new_time /= iterations;
   return new_time;
 }
 

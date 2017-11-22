@@ -13,14 +13,15 @@
 // limitations under the License.
 
 #include "counter.h"
+#include "time_util.h"
 
 namespace benchmark {
 namespace internal {
 
-double Finish(Counter const& c, double cpu_time, double num_threads) {
+double Finish(Counter const& c, nanoseconds cpu_time, int num_threads) {
   double v = c.value;
   if (c.flags & Counter::kIsRate) {
-    v /= cpu_time;
+    v /= duration_cast<FPSeconds>(cpu_time).count();
   }
   if (c.flags & Counter::kAvgThreads) {
     v /= num_threads;
@@ -28,7 +29,7 @@ double Finish(Counter const& c, double cpu_time, double num_threads) {
   return v;
 }
 
-void Finish(UserCounters *l, double cpu_time, double num_threads) {
+void Finish(UserCounters* l, nanoseconds cpu_time, int num_threads) {
   for (auto &c : *l) {
     c.second.value = Finish(c.second, cpu_time, num_threads);
   }

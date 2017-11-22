@@ -44,7 +44,7 @@
 #include "re.h"
 #include "statistics.h"
 #include "string_util.h"
-#include "timers.h"
+#include "time_util.h"
 
 DEFINE_bool(benchmark_list_tests, false,
             "Print a list of benchmarks. This option overrides all other "
@@ -145,8 +145,8 @@ class ThreadManager {
 
  public:
   struct Result {
-    double real_time_used = 0;
-    double cpu_time_used = 0;
+    nanoseconds real_time_used = nanoseconds::zero();
+    nanoseconds cpu_time_used = nanoseconds::zero();
     double manual_time_used = 0;
     int64_t bytes_processed = 0;
     int64_t items_processed = 0;
@@ -174,33 +174,33 @@ class ThreadTimer {
   // Called by each thread
   void StartTimer() {
     running_ = true;
-    start_real_time_ = ChronoClockNow();
-    start_cpu_time_ = ThreadCPUUsage();
+    start_real_time_ = ChronoClock::now();
+    start_cpu_time_ = ThreadCPUClock::now();
   }
 
   // Called by each thread
   void StopTimer() {
     CHECK(running_);
     running_ = false;
-    real_time_used_ += ChronoClockNow() - start_real_time_;
+    real_time_used_ += ChronoClock::now() - start_real_time_;
     // Floating point error can result in the subtraction producing a negative
     // time. Guard against that.
-    cpu_time_used_ += std::max<double>(ThreadCPUUsage() - start_cpu_time_, 0);
+    cpu_time_used_ += ThreadCPUClock::now() - start_cpu_time_;
   }
 
   // Called by each thread
-  void SetIterationTime(double seconds) { manual_time_used_ += seconds; }
+  void SetIterationTime(double secs) { manual_time_used_ += secs; }
 
   bool running() const { return running_; }
 
   // REQUIRES: timer is not running
-  double real_time_used() {
+  nanoseconds real_time_used() {
     CHECK(!running_);
     return real_time_used_;
   }
 
   // REQUIRES: timer is not running
-  double cpu_time_used() {
+  nanoseconds cpu_time_used() {
     CHECK(!running_);
     return cpu_time_used_;
   }
@@ -213,13 +213,13 @@ class ThreadTimer {
 
  private:
   bool running_ = false;        // Is the timer running
-  double start_real_time_ = 0;  // If running_
-  double start_cpu_time_ = 0;   // If running_
+  ChronoClock::time_point start_real_time_;    // If running_
+  ThreadCPUClock::time_point start_cpu_time_;  // If running_
 
   // Accumulated time so far (does not contain current slice if running_)
-  double real_time_used_ = 0;
-  double cpu_time_used_ = 0;
-  // Manually set iteration time. User sets this with SetIterationTime(seconds).
+  nanoseconds real_time_used_ = nanoseconds::zero();
+  nanoseconds cpu_time_used_ = nanoseconds::zero();
+  // Manually set iteration time. User sets this with SetIterationTime(secs).
   double manual_time_used_ = 0;
 };
 
@@ -228,7 +228,7 @@ namespace {
 BenchmarkReporter::Run CreateRunReport(
     const benchmark::internal::Benchmark::Instance& b,
     const internal::ThreadManager::Result& results, size_t iters,
-    double seconds) {
+    nanoseconds nsecs) {
   // Create report about this benchmark run.
   BenchmarkReporter::Run report;
 
@@ -239,19 +239,21 @@ BenchmarkReporter::Run CreateRunReport(
   // Report the total iterations across all threads.
   report.iterations = static_cast<int64_t>(iters) * b.threads;
   report.time_unit = b.time_unit;
-
+  double secs = duration_cast<FPSeconds>(nsecs).count();
   if (!report.error_occurred) {
     double bytes_per_second = 0;
-    if (results.bytes_processed > 0 && seconds > 0.0) {
-      bytes_per_second = (results.bytes_processed / seconds);
+    if (results.bytes_processed > 0 && secs > 0.0) {
+      bytes_per_second = (results.bytes_processed / secs);
     }
     double items_per_second = 0;
-    if (results.items_processed > 0 && seconds > 0.0) {
-      items_per_second = (results.items_processed / seconds);
+    if (results.items_processed > 0 && secs > 0.0) {
+      items_per_second = (results.items_processed / secs);
     }
 
     if (b.use_manual_time) {
-      report.real_accumulated_time = results.manual_time_used;
+      // FIXME
+      report.real_accumulated_time =
+          duration_cast<nanoseconds>(FPSeconds(results.manual_time_used));
     } else {
       report.real_accumulated_time = results.real_time_used;
     }
@@ -263,7 +265,7 @@ BenchmarkReporter::Run CreateRunReport(
     report.complexity_lambda = b.complexity_lambda;
     report.statistics = b.statistics;
     report.counters = results.counters;
-    internal::Finish(&report.counters, seconds, b.threads);
+    internal::Finish(&report.counters, nsecs, b.threads);
   }
   return report;
 }
@@ -331,35 +333,37 @@ std::vector<BenchmarkReporter::Run> RunBenchmark(
       results.real_time_used /= b.threads;
       results.manual_time_used /= b.threads;
 
-      VLOG(2) << "Ran in " << results.cpu_time_used << "/"
-              << results.real_time_used << "\n";
+      VLOG(2) << "Ran in " << results.cpu_time_used.count() << "/"
+              << results.real_time_used.count() << "\n";
 
       // Base decisions off of real time if requested by this benchmark.
-      double seconds = results.cpu_time_used;
+      FPSeconds secs(results.cpu_time_used);
       if (b.use_manual_time) {
-        seconds = results.manual_time_used;
+        secs = FPSeconds(results.manual_time_used);
       } else if (b.use_real_time) {
-        seconds = results.real_time_used;
+        secs = duration_cast<FPSeconds>(results.real_time_used);
       }
 
-      const double min_time =
-          !IsZero(b.min_time) ? b.min_time : FLAGS_benchmark_min_time;
+      const FPSeconds min_time = !IsZero(b.min_time)
+                                     ? FPSeconds(b.min_time)
+                                     : FPSeconds(FLAGS_benchmark_min_time);
 
       // Determine if this run should be reported; Either it has
       // run for a sufficient amount of time or because an error was reported.
-      const bool should_report =  repetition_num > 0
-        || has_explicit_iteration_count // An exact iteration count was requested
-        || results.has_error_
-        || iters >= kMaxIterations
-        || seconds >= min_time // the elapsed time is large enough
-        // CPU time is specified but the elapsed real time greatly exceeds the
-        // minimum time. Note that user provided timers are except from this
-        // sanity check.
-        || ((results.real_time_used >= 5 * min_time) && !b.use_manual_time);
+      const bool should_report =
+          repetition_num > 0 ||
+          has_explicit_iteration_count  // An exact iteration count was
+                                        // requested
+          || results.has_error_ || iters >= kMaxIterations ||
+          secs >= min_time  // the elapsed time is large enough
+          // CPU time is specified but the elapsed real time greatly exceeds the
+          // minimum time. Note that user provided timers are except from this
+          // sanity check.
+          || ((results.real_time_used >= 5 * min_time) && !b.use_manual_time);
 
       if (should_report) {
-        BenchmarkReporter::Run report =
-            CreateRunReport(b, results, iters, seconds);
+        BenchmarkReporter::Run report = CreateRunReport(
+            b, results, iters, duration_cast<nanoseconds>(secs));
         if (!report.error_occurred && b.complexity != oNone)
           complexity_reports->push_back(report);
         reports.push_back(report);
@@ -367,14 +371,15 @@ std::vector<BenchmarkReporter::Run> RunBenchmark(
       }
 
       // See how much iterations should be increased by
-      // Note: Avoid division by zero with max(seconds, 1ns).
-      double multiplier = min_time * 1.4 / std::max(seconds, 1e-9);
+      // Note: Avoid division by zero with max(secs, 1ns).
+      double multiplier =
+          (min_time.count() * 1.4) / std::max(secs.count(), 1e-9);
       // If our last run was at least 10% of FLAGS_benchmark_min_time then we
       // use the multiplier directly. Otherwise we use at most 10 times
       // expansion.
       // NOTE: When the last run was at least 10% of the min time the max
       // expansion should be 14x.
-      bool is_significant = (seconds / min_time) > 0.1;
+      bool is_significant = (secs / min_time) > 0.1;
       multiplier = is_significant ? multiplier : std::min(10.0, multiplier);
       if (multiplier <= 1.0) multiplier = 2.0;
       double next_iters = std::max(multiplier * iters, iters + 1.0);
@@ -449,9 +454,7 @@ void State::SkipWithError(const char* msg) {
   if (timer_->running()) timer_->StopTimer();
 }
 
-void State::SetIterationTime(double seconds) {
-  timer_->SetIterationTime(seconds);
-}
+void State::SetIterationTime(double secs) { timer_->SetIterationTime(secs); }
 
 void State::SetLabel(const char* label) {
   MutexLock l(manager_->GetBenchmarkMutex());

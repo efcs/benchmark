@@ -25,7 +25,7 @@
 #include <limits>
 
 #include "string_util.h"
-#include "timers.h"
+#include "time_util.h"
 
 namespace benchmark {
 
@@ -136,25 +136,24 @@ void JSONReporter::PrintRunData(Run const& run) {
   }
   if (!run.report_big_o && !run.report_rms) {
     out << indent << FormatKV("iterations", run.iterations) << ",\n";
-    out << indent
-        << FormatKV("real_time", run.GetAdjustedRealTime())
+    out << indent << FormatKV("real_time", run.GetAdjustedRealTime().count())
         << ",\n";
-    out << indent
-        << FormatKV("cpu_time", run.GetAdjustedCPUTime());
+    out << indent << FormatKV("cpu_time", run.GetAdjustedCPUTime().count());
     out << ",\n"
         << indent << FormatKV("time_unit", GetTimeUnitString(run.time_unit));
   } else if (run.report_big_o) {
     out << indent
-        << FormatKV("cpu_coefficient", run.GetAdjustedCPUTime())
+        << FormatKV("cpu_coefficient",
+                    duration_cast<FPSeconds>(run.GetAdjustedCPUTime()).count())
         << ",\n";
     out << indent
-        << FormatKV("real_coefficient", run.GetAdjustedRealTime())
+        << FormatKV("real_coefficient",
+                    duration_cast<FPSeconds>(run.GetAdjustedRealTime()).count())
         << ",\n";
     out << indent << FormatKV("big_o", GetBigOString(run.complexity)) << ",\n";
     out << indent << FormatKV("time_unit", GetTimeUnitString(run.time_unit));
   } else if (run.report_rms) {
-    out << indent
-        << FormatKV("rms", run.GetAdjustedCPUTime());
+    out << indent << FormatKV("rms", run.GetAdjustedCPUTime().count());
   }
   if (run.bytes_per_second > 0.0) {
     out << ",\n"

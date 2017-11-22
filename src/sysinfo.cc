@@ -48,8 +48,8 @@
 #include "cycleclock.h"
 #include "internal_macros.h"
 #include "log.h"
-#include "sleep.h"
 #include "string_util.h"
+#include "time_util.h"
 
 namespace benchmark {
 namespace {
@@ -310,6 +310,17 @@ int GetNumCPUs() {
   BENCHMARK_UNREACHABLE();
 }
 
+void SleepFor(nanoseconds num_ns) {
+#if defined(BENCHMARK_OS_WINDOWS)
+  // Window's Sleep takes milliseconds argument.
+  Sleep(duration_cast<milliseconds>(num_ns).count());
+#else
+  TimeSpec sleep_time = ToTimeSpec(num_ns);
+  while (nanosleep(&sleep_time, &sleep_time) != 0 && errno == EINTR)
+    ;  // Ignore signals and wait for the full interval to elapse.
+#endif
+}
+
 double GetCPUCyclesPerSecond() {
 #if defined BENCHMARK_OS_LINUX || defined BENCHMARK_OS_CYGWIN
   long freq;
@@ -410,7 +421,7 @@ double GetCPUCyclesPerSecond() {
   // If we've fallen through, attempt to roughly estimate the CPU clock rate.
   const int estimate_time_ms = 1000;
   const auto start_ticks = cycleclock::Now();
-  SleepForMilliseconds(estimate_time_ms);
+  SleepFor(milliseconds(estimate_time_ms));
   return static_cast<double>(cycleclock::Now() - start_ticks);
 }
 

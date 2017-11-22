@@ -37,12 +37,12 @@
 #include "check.h"
 #include "commandlineflags.h"
 #include "complexity.h"
-#include "statistics.h"
 #include "log.h"
 #include "mutex.h"
 #include "re.h"
+#include "statistics.h"
 #include "string_util.h"
-#include "timers.h"
+#include "time_util.h"
 
 namespace benchmark {
 

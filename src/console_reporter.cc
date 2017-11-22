@@ -29,7 +29,7 @@
 #include "commandlineflags.h"
 #include "internal_macros.h"
 #include "string_util.h"
-#include "timers.h"
+#include "time_util.h"
 
 namespace benchmark {
 
@@ -127,8 +127,9 @@ void ConsoleReporter::PrintRunData(const Run& result) {
         StrCat(" ", HumanReadableNumber(result.items_per_second), " items/s");
   }
 
-  const double real_time = result.GetAdjustedRealTime();
-  const double cpu_time = result.GetAdjustedCPUTime();
+  const nanoseconds real_time = result.GetAdjustedRealTime();
+  const FPSeconds real_time_fp = duration_cast<FPSeconds>(real_time);
+  const nanoseconds cpu_time = result.GetAdjustedCPUTime();
 
   if (result.report_big_o) {
     std::string big_o = GetBigOString(result.complexity);
@@ -139,8 +140,8 @@ void ConsoleReporter::PrintRunData(const Run& result) {
             cpu_time * 100);
   } else {
     const char* timeLabel = GetTimeUnitString(result.time_unit);
-    printer(Out, COLOR_YELLOW, "%10.0f %s %10.0f %s ", real_time, timeLabel,
-            cpu_time, timeLabel);
+    printer(Out, COLOR_YELLOW, "%10lld ns %10lld ns", real_time.count(),
+            cpu_time.count());
   }
 
   if (!result.report_big_o && !result.report_rms) {

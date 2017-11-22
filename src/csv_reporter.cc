@@ -22,9 +22,9 @@
 #include <tuple>
 #include <vector>
 
-#include "string_util.h"
-#include "timers.h"
 #include "check.h"
+#include "string_util.h"
+#include "time_util.h"
 
 // File format reference: http://edoceo.com/utilitas/csv-file-format.
 
@@ -106,8 +106,8 @@ void CSVReporter::PrintRunData(const Run & run) {
   }
   Out << ",";
 
-  Out << run.GetAdjustedRealTime() << ",";
-  Out << run.GetAdjustedCPUTime() << ",";
+  Out << duration_cast<FPSeconds>(run.GetAdjustedRealTime()).count() << ",";
+  Out << duration_cast<FPSeconds>(run.GetAdjustedCPUTime()).count() << ",";
 
   // Do not print timeLabel on bigO and RMS report
   if (run.report_big_o) {

@@ -79,10 +79,11 @@ else()
   if (NOT HAVE_CXX_FLAG_STD_CXX11)
     add_cxx_compiler_flag(-std=c++0x)
   endif()
+  add_cxx_compiler_flag(-ferror-limit=2)
+  add_cxx_compiler_flag(-fcolor-diagnostics)
 
   # Turn compiler warnings up to 11
   add_cxx_compiler_flag(-Wall)
-
   add_cxx_compiler_flag(-Wextra)
   add_cxx_compiler_flag(-Wshadow)
   add_cxx_compiler_flag(-Werror RELEASE)

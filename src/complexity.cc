@@ -21,6 +21,7 @@
 #include <cmath>
 #include "check.h"
 #include "complexity.h"
+#include "time_util.h"
 
 namespace benchmark {
 
@@ -165,8 +166,12 @@ std::vector<BenchmarkReporter::Run> ComputeBigO(
   for (const Run& run : reports) {
     CHECK_GT(run.complexity_n, 0) << "Did you forget to call SetComplexityN?";
     n.push_back(run.complexity_n);
-    real_time.push_back(run.real_accumulated_time / run.iterations);
-    cpu_time.push_back(run.cpu_accumulated_time / run.iterations);
+    real_time.push_back(
+        duration_cast<FPSeconds>(run.real_accumulated_time).count() /
+        run.iterations);
+    cpu_time.push_back(
+        duration_cast<FPSeconds>(run.cpu_accumulated_time).count() /
+        run.iterations);
   }
 
   LeastSq result_cpu;
@@ -186,8 +191,10 @@ std::vector<BenchmarkReporter::Run> ComputeBigO(
   Run big_o;
   big_o.benchmark_name = benchmark_name + "_BigO";
   big_o.iterations = 0;
-  big_o.real_accumulated_time = result_real.coef;
-  big_o.cpu_accumulated_time = result_cpu.coef;
+  big_o.real_accumulated_time =
+      duration_cast<nanoseconds>(FPSeconds(result_real.coef));
+  big_o.cpu_accumulated_time =
+      duration_cast<nanoseconds>(FPSeconds(result_cpu.coef));
   big_o.report_big_o = true;
   big_o.complexity = result_cpu.complexity;
 
@@ -204,8 +211,10 @@ std::vector<BenchmarkReporter::Run> ComputeBigO(
   rms.benchmark_name = benchmark_name + "_RMS";
   rms.report_label = big_o.report_label;
   rms.iterations = 0;
-  rms.real_accumulated_time = result_real.rms / multiplier;
-  rms.cpu_accumulated_time = result_cpu.rms / multiplier;
+  rms.real_accumulated_time =
+      duration_cast<nanoseconds>(FPSeconds(result_real.rms / multiplier));
+  rms.cpu_accumulated_time =
+      duration_cast<nanoseconds>(FPSeconds(result_cpu.rms / multiplier));
   rms.report_rms = true;
   rms.complexity = result_cpu.complexity;
   // don't forget to keep the time unit, or we won't be able to
