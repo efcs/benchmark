@@ -666,22 +666,22 @@ typedef void(Function)(State&);
 
 class BenchmarkInfoBase {
  public:
-  std::string name_;
-  size_t index_;
-  ReportMode report_mode_;
-  std::vector<std::string> arg_names_;   // Args for all benchmark runs
-  std::vector<std::vector<int> > args_;  // Args for all benchmark runs
-  TimeUnit time_unit_;
-  int range_multiplier_;
-  double min_time_;
-  size_t iterations_;
-  int repetitions_;
-  bool use_real_time_;
-  bool use_manual_time_;
-  BigO complexity_;
-  BigOFunc* complexity_lambda_;
-  std::vector<Statistics> statistics_;
-  std::vector<int> thread_counts_;
+  std::string family_name;
+  size_t index;
+  ReportMode report_mode;
+  std::vector<std::string> arg_names;   // Args for all benchmark runs
+  std::vector<std::vector<int> > args;  // Args for all benchmark runs
+  TimeUnit time_unit;
+  int range_multiplier;
+  double min_time;
+  size_t iterations;
+  int repetitions;
+  bool use_real_time;
+  bool use_manual_time;
+  BigO complexity;
+  BigOFunc* complexity_lambda;
+  std::vector<Statistics> statistics;
+  std::vector<int> thread_counts;
 
  protected:
   BenchmarkInfoBase(const char* Name);
@@ -850,7 +850,14 @@ class Benchmark : protected BenchmarkInfoBase {
   virtual void Run(State& state) = 0;
 
   // Used inside the benchmark implementation
-  struct Instance;
+  struct Instance {
+    std::string name;
+    Benchmark* benchmark;
+    const BenchmarkInfoBase* info;
+    std::vector<int> arg;
+    int threads;  // Number of concurrent threads to us
+    bool last_benchmark_instance;
+  };
 
  protected:
   explicit Benchmark(const char* name);

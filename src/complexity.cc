@@ -171,11 +171,12 @@ JSON ComputeBigO(const benchmark::internal::Benchmark::Instance& instance,
   LeastSq result_cpu;
   LeastSq result_real;
 
-  if (instance.complexity == oLambda) {
-    result_cpu = MinimalLeastSq(n, cpu_time, instance.complexity_lambda);
-    result_real = MinimalLeastSq(n, real_time, instance.complexity_lambda);
+  if (instance.info->complexity == oLambda) {
+    result_cpu = MinimalLeastSq(n, cpu_time, instance.info->complexity_lambda);
+    result_real =
+        MinimalLeastSq(n, real_time, instance.info->complexity_lambda);
   } else {
-    result_cpu = MinimalLeastSq(n, cpu_time, instance.complexity);
+    result_cpu = MinimalLeastSq(n, cpu_time, instance.info->complexity);
     result_real = MinimalLeastSq(n, real_time, result_cpu.complexity);
   }
   std::string benchmark_name = instance.name.substr(0, instance.name.find('/'));
@@ -185,7 +186,7 @@ JSON ComputeBigO(const benchmark::internal::Benchmark::Instance& instance,
   // should not be multiplied at all. So, here, we _divide_ it by the
   // multiplier so that when it is multiplied later the result is the
   // correct one.
-  double multiplier = GetTimeUnitMultiplier(instance.time_unit);
+  double multiplier = GetTimeUnitMultiplier(instance.info->time_unit);
 
   JSON json_report = {
       {"name", benchmark_name},

@@ -107,7 +107,7 @@ static const size_t kMaxIterations = 1000000000;
 
 namespace internal {
 
-bool IsZero(double n) {
+static bool IsZero(double n) {
   return std::abs(n) < std::numeric_limits<double>::epsilon();
 }
 
@@ -248,8 +248,8 @@ JSON CreateRunReport(const benchmark::internal::Benchmark::Instance& b,
   if (results.has_error_) json_report["error_message"] = results.error_message_;
 
   if (!results.has_error_) {
-    json_report["time_unit"] = GetTimeUnitString(b.time_unit);
-    auto UnitMul = GetTimeUnitMultiplier(b.time_unit);
+    json_report["time_unit"] = GetTimeUnitString(b.info->time_unit);
+    auto UnitMul = GetTimeUnitMultiplier(b.info->time_unit);
 
     if (results.bytes_processed > 0 && seconds > 0.0) {
       json_report["bytes_per_second"] = (results.bytes_processed / seconds);
@@ -258,8 +258,8 @@ JSON CreateRunReport(const benchmark::internal::Benchmark::Instance& b,
       json_report["items_per_second"] = (results.items_processed / seconds);
     }
 
-    double real_time =
-        b.use_manual_time ? results.manual_time_used : results.real_time_used;
+    double real_time = b.info->use_manual_time ? results.manual_time_used
+                                               : results.real_time_used;
     real_time *= UnitMul;
     json_report["real_accumulated_time"] = real_time;
     json_report["real_iteration_time"] =
@@ -271,7 +271,7 @@ JSON CreateRunReport(const benchmark::internal::Benchmark::Instance& b,
 
     if (results.complexity_n != 0)
       json_report["complexity_n"] = results.complexity_n;
-    if (b.complexity != 0) json_report["complexity"] = b.complexity;
+    if (b.info->complexity != 0) json_report["complexity"] = b.info->complexity;
 
     // report.statistics = b.statistics;
     auto counters_cp = results.counters;
@@ -311,12 +311,12 @@ JSON RunBenchmark(const benchmark::internal::Benchmark::Instance& b,
                   std::vector<JSON>* complexity_reports) {
   std::vector<JSON> run_reports;
 
-  const bool has_explicit_iteration_count = b.iterations != 0;
-  size_t iters = has_explicit_iteration_count ? b.iterations : 1;
+  const bool has_explicit_iteration_count = b.info->iterations != 0;
+  size_t iters = has_explicit_iteration_count ? b.info->iterations : 1;
   std::unique_ptr<internal::ThreadManager> manager;
   std::vector<std::thread> pool(b.threads - 1);
-  const int repeats =
-      b.repetitions != 0 ? b.repetitions : FLAGS_benchmark_repetitions;
+  const int repeats = b.info->repetitions != 0 ? b.info->repetitions
+                                               : FLAGS_benchmark_repetitions;
 
   for (int repetition_num = 0; repetition_num < repeats; repetition_num++) {
     for (;;) {
@@ -346,31 +346,34 @@ JSON RunBenchmark(const benchmark::internal::Benchmark::Instance& b,
 
       // Base decisions off of real time if requested by this benchmark.
       double seconds = results.cpu_time_used;
-      if (b.use_manual_time) {
+      if (b.info->use_manual_time) {
         seconds = results.manual_time_used;
-      } else if (b.use_real_time) {
+      } else if (b.info->use_real_time) {
         seconds = results.real_time_used;
       }
 
-      const double min_time =
-          !IsZero(b.min_time) ? b.min_time : FLAGS_benchmark_min_time;
+      const double min_time = !IsZero(b.info->min_time)
+                                  ? b.info->min_time
+                                  : FLAGS_benchmark_min_time;
 
       // Determine if this run should be reported; Either it has
       // run for a sufficient amount of time or because an error was reported.
-      const bool should_report =  repetition_num > 0
-        || has_explicit_iteration_count // An exact iteration count was requested
-        || results.has_error_
-        || iters >= kMaxIterations
-        || seconds >= min_time // the elapsed time is large enough
-        // CPU time is specified but the elapsed real time greatly exceeds the
-        // minimum time. Note that user provided timers are except from this
-        // sanity check.
-        || ((results.real_time_used >= 5 * min_time) && !b.use_manual_time);
+      const bool should_report =
+          repetition_num > 0 ||
+          has_explicit_iteration_count  // An exact iteration count was
+                                        // requested
+          || results.has_error_ || iters >= kMaxIterations ||
+          seconds >= min_time  // the elapsed time is large enough
+          // CPU time is specified but the elapsed real time greatly exceeds the
+          // minimum time. Note that user provided timers are except from this
+          // sanity check.
+          || ((results.real_time_used >= 5 * min_time) &&
+              !b.info->use_manual_time);
 
       if (should_report) {
         JSON report = CreateRunReport(b, results, iters, seconds);
         bool IsError = report.at("kind").get<std::string>() == "error";
-        if (!IsError && b.complexity != oNone)
+        if (!IsError && b.info->complexity != oNone)
           complexity_reports->push_back(report);
         run_reports.push_back(report);
         break;
@@ -397,8 +400,8 @@ JSON RunBenchmark(const benchmark::internal::Benchmark::Instance& b,
   }
 
   // Calculate additional statistics
-  auto stat_reports = ComputeStats(run_reports, b.info->statistics_);
-  if ((b.complexity != oNone) && b.last_benchmark_instance) {
+  auto stat_reports = ComputeStats(run_reports, b.info->statistics);
+  if ((b.info->complexity != oNone) && b.last_benchmark_instance) {
     auto additional_run_stats = ComputeBigO(b, *complexity_reports);
     stat_reports.insert(stat_reports.end(), additional_run_stats.begin(),
                         additional_run_stats.end());
@@ -407,12 +410,12 @@ JSON RunBenchmark(const benchmark::internal::Benchmark::Instance& b,
 
   const bool report_aggregates_only =
       repeats != 1 &&
-      (b.report_mode == internal::RM_Unspecified
+      (b.info->report_mode == internal::RM_Unspecified
            ? FLAGS_benchmark_report_aggregates_only
-           : b.report_mode == internal::RM_ReportAggregatesOnly);
+           : b.info->report_mode == internal::RM_ReportAggregatesOnly);
 
   JSON reports_json = {{"name", b.name},
-                       {"family", b.info->index_},
+                       {"family", b.info->index},
                        {"runs", run_reports},
                        {"stats", stat_reports},
                        {"report_aggregates_only", report_aggregates_only}};
@@ -512,9 +515,9 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
   for (const Benchmark::Instance& benchmark : benchmarks) {
     name_field_width =
         std::max<size_t>(name_field_width, benchmark.name.size());
-    has_repetitions |= benchmark.repetitions > 1;
+    has_repetitions |= benchmark.info->repetitions > 1;
 
-    for (const auto& Stat : benchmark.info->statistics_)
+    for (const auto& Stat : benchmark.info->statistics)
       stat_field_width = std::max<size_t>(stat_field_width, Stat.name_.size());
   }
   if (has_repetitions) name_field_width += 1 + stat_field_width;

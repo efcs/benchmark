@@ -13,31 +13,10 @@ namespace benchmark {
 namespace internal {
 
 // Information kept per benchmark we may want to run
-struct Benchmark::Instance {
-  std::string name;
-  Benchmark* benchmark;
-  const BenchmarkInfoBase* info;
-  ReportMode report_mode;
-  std::vector<int> arg;
-  TimeUnit time_unit;
-  int range_multiplier;
-  bool use_real_time;
-  bool use_manual_time;
-  BigO complexity;
-  BigOFunc* complexity_lambda;
-  UserCounters counters;
-  bool last_benchmark_instance;
-  int repetitions;
-  double min_time;
-  size_t iterations;
-  int threads;  // Number of concurrent threads to us
-};
 
 bool FindBenchmarksInternal(const std::string& re,
                             std::vector<Benchmark::Instance>* benchmarks,
                             std::ostream* Err);
-
-bool IsZero(double n);
 
 ConsoleReporter::OutputOptions GetOutputOptions(bool force_no_color = false);
 
