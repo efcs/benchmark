@@ -80,7 +80,7 @@ class BenchmarkFamilies {
   // Extract the list of benchmark instances that match the specified
   // regular expression.
   bool FindBenchmarks(const std::string& re,
-                      std::vector<Benchmark::Instance>* benchmarks,
+                      std::vector<BenchmarkInstance>* benchmarks,
                       std::ostream* Err);
 
   static const BenchmarkInfoBase* GetInfo(const Benchmark* B) {
@@ -116,7 +116,7 @@ void BenchmarkFamilies::ClearBenchmarks() {
 }
 
 bool BenchmarkFamilies::FindBenchmarks(
-    const std::string& spec, std::vector<Benchmark::Instance>* benchmarks,
+    const std::string& spec, std::vector<BenchmarkInstance>* benchmarks,
     std::ostream* ErrStream) {
   CHECK(ErrStream);
   auto& Err = *ErrStream;
@@ -156,7 +156,7 @@ bool BenchmarkFamilies::FindBenchmarks(
 
     for (auto const& args : family->args) {
       for (int num_threads : *thread_counts) {
-        Benchmark::Instance instance;
+        BenchmarkInstance instance;
         instance.name = family->family_name;
         instance.benchmark = family.get();
         instance.info = family.get();
@@ -218,7 +218,7 @@ Benchmark* RegisterBenchmarkInternal(Benchmark* bench) {
 // FIXME: This function is a hack so that benchmark.cc can access
 // `BenchmarkFamilies`
 bool FindBenchmarksInternal(const std::string& re,
-                            std::vector<Benchmark::Instance>* benchmarks,
+                            std::vector<BenchmarkInstance>* benchmarks,
                             std::ostream* Err) {
   return BenchmarkFamilies::GetInstance()->FindBenchmarks(re, benchmarks, Err);
 }
@@ -471,6 +471,13 @@ int Benchmark::ArgsCnt() const {
 void FunctionBenchmark::Run(State& st) { func_(st); }
 
 }  // end namespace internal
+
+BenchmarkInstanceList FindBenchmarks(std::string const& re) {
+  BenchmarkInstanceList res;
+  internal::BenchmarkFamilies::GetInstance()->FindBenchmarks(re, &res,
+                                                             &std::cerr);
+  return res;
+}
 
 void ClearRegisteredBenchmarks() {
   internal::BenchmarkFamilies::GetInstance()->ClearBenchmarks();

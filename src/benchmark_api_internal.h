@@ -1,13 +1,13 @@
 #ifndef BENCHMARK_API_INTERNAL_H
 #define BENCHMARK_API_INTERNAL_H
 
-#include "benchmark/benchmark.h"
-
 #include <cmath>
 #include <iosfwd>
 #include <limits>
 #include <string>
 #include <vector>
+#include "benchmark/benchmark.h"
+#include "reporter.h"
 
 namespace benchmark {
 namespace internal {
@@ -15,7 +15,7 @@ namespace internal {
 // Information kept per benchmark we may want to run
 
 bool FindBenchmarksInternal(const std::string& re,
-                            std::vector<Benchmark::Instance>* benchmarks,
+                            std::vector<BenchmarkInstance>* benchmarks,
                             std::ostream* Err);
 
 ConsoleReporter::OutputOptions GetOutputOptions(bool force_no_color = false);

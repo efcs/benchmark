@@ -42,6 +42,7 @@
 #include "log.h"
 #include "mutex.h"
 #include "re.h"
+#include "reporter.h"
 #include "statistics.h"
 #include "string_util.h"
 #include "sysinfo.h"
@@ -77,11 +78,7 @@ DEFINE_bool(benchmark_report_aggregates_only, false,
 
 DEFINE_string(benchmark_format, "console",
               "The format to use for console output. Valid values are "
-              "'console', 'json', or 'csv'.");
-
-DEFINE_string(benchmark_out_format, "json",
-              "The format to use for file output. Valid values are "
-              "'console', 'json', or 'csv'.");
+              "'console', or 'json'.");
 
 DEFINE_string(benchmark_out, "", "The file to write additonal output to");
 
@@ -230,7 +227,7 @@ class ThreadTimer {
 
 namespace {
 
-JSON CreateRunReport(const benchmark::internal::Benchmark::Instance& b,
+JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
                      const internal::ThreadManager::Result& results,
                      size_t iters, double seconds) {
   // Create report about this benchmark run.
@@ -285,9 +282,8 @@ JSON CreateRunReport(const benchmark::internal::Benchmark::Instance& b,
 
 // Execute one thread of benchmark b for the specified number of iterations.
 // Adds the stats collected for the thread into *total.
-void RunInThread(const benchmark::internal::Benchmark::Instance* b,
-                 size_t iters, int thread_id,
-                 internal::ThreadManager* manager) {
+void RunInThread(const benchmark::internal::BenchmarkInstance* b, size_t iters,
+                 int thread_id, internal::ThreadManager* manager) {
   internal::ThreadTimer timer;
   State st(iters, b->arg, thread_id, b->threads, &timer, manager);
   b->benchmark->Run(st);
@@ -307,7 +303,7 @@ void RunInThread(const benchmark::internal::Benchmark::Instance* b,
   manager->NotifyThreadComplete();
 }
 
-JSON RunBenchmark(const benchmark::internal::Benchmark::Instance& b,
+JSON RunBenchmark(const benchmark::internal::BenchmarkInstance& b,
                   std::vector<JSON>* complexity_reports) {
   std::vector<JSON> run_reports;
 
@@ -502,9 +498,8 @@ void State::FinishKeepRunning() {
 namespace internal {
 namespace {
 
-void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
-                           BenchmarkReporter* console_reporter,
-                           BenchmarkReporter* file_reporter) {
+JSON RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
+                   BenchmarkReporter* console_reporter) {
   // Note the file_reporter can be null.
   CHECK(console_reporter != nullptr);
 
@@ -512,7 +507,7 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
   bool has_repetitions = FLAGS_benchmark_repetitions > 1;
   size_t name_field_width = 10;
   size_t stat_field_width = 0;
-  for (const Benchmark::Instance& benchmark : benchmarks) {
+  for (const BenchmarkInstance& benchmark : benchmarks) {
     name_field_width =
         std::max<size_t>(name_field_width, benchmark.name.size());
     has_repetitions |= benchmark.info->repetitions > 1;
@@ -532,6 +527,7 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
                {"date", LocalDateTimeString()},
                {"library_build_type", build_type},
                {"cpu_info", CPUInfo::Get()}};
+  JSON benchmark_res = JSON::array();
 
   // Keep track of runing times of all instances of current benchmark
   std::vector<JSON> complexity_reports;
@@ -544,22 +540,20 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
     std::flush(reporter->GetErrorStream());
   };
 
-  if (console_reporter->ReportContext(context) &&
-      (!file_reporter || file_reporter->ReportContext(context))) {
+  if (console_reporter->ReportContext(context)) {
     flushStreams(console_reporter);
-    flushStreams(file_reporter);
+
     for (const auto& benchmark : benchmarks) {
       JSON report = RunBenchmark(benchmark, &complexity_reports);
+      benchmark_res.push_back(report);
       console_reporter->ReportResults(report);
-      if (file_reporter) file_reporter->ReportResults(report);
       flushStreams(console_reporter);
-      flushStreams(file_reporter);
     }
   }
   console_reporter->Finalize();
-  if (file_reporter) file_reporter->Finalize();
   flushStreams(console_reporter);
-  flushStreams(file_reporter);
+  JSON res{{"context", context}, {"benchmarks", benchmark_res}};
+  return res;
 }
 
 std::unique_ptr<BenchmarkReporter> CreateReporter(
@@ -569,8 +563,6 @@ std::unique_ptr<BenchmarkReporter> CreateReporter(
     return PtrType(new ConsoleReporter(output_opts));
   } else if (name == "json") {
     return PtrType(new JSONReporter);
-  } else if (name == "csv") {
-    return PtrType(new CSVReporter);
   } else {
     std::cerr << "Unexpected format: '" << name << "'\n";
     std::exit(1);
@@ -601,54 +593,26 @@ ConsoleReporter::OutputOptions GetOutputOptions(bool force_no_color) {
 }  // end namespace internal
 
 size_t RunSpecifiedBenchmarks() {
-  return RunSpecifiedBenchmarks(nullptr, nullptr);
+  return RunSpecifiedBenchmarks(&std::cout, &std::cerr);
 }
 
-size_t RunSpecifiedBenchmarks(BenchmarkReporter* console_reporter) {
-  return RunSpecifiedBenchmarks(console_reporter, nullptr);
-}
-
-size_t RunSpecifiedBenchmarks(BenchmarkReporter* console_reporter,
-                              BenchmarkReporter* file_reporter) {
+size_t RunSpecifiedBenchmarks(std::ostream* out, std::ostream* err) {
   std::string spec = FLAGS_benchmark_filter;
   if (spec.empty() || spec == "all")
     spec = ".";  // Regexp that matches all benchmarks
 
   // Setup the reporters
-  std::ofstream output_file;
-  std::unique_ptr<BenchmarkReporter> default_console_reporter;
-  std::unique_ptr<BenchmarkReporter> default_file_reporter;
-  if (!console_reporter) {
-    default_console_reporter = internal::CreateReporter(
-          FLAGS_benchmark_format, internal::GetOutputOptions());
-    console_reporter = default_console_reporter.get();
-  }
+  std::unique_ptr<BenchmarkReporter> console_reporter =
+      internal::CreateReporter(FLAGS_benchmark_format,
+                               internal::GetOutputOptions());
+
+  console_reporter->SetOutputStream(out);
+  console_reporter->SetErrorStream(err);
+
   auto& Out = console_reporter->GetOutputStream();
   auto& Err = console_reporter->GetErrorStream();
 
-  std::string const& fname = FLAGS_benchmark_out;
-  if (fname.empty() && file_reporter) {
-    Err << "A custom file reporter was provided but "
-           "--benchmark_out=<file> was not specified."
-        << std::endl;
-    std::exit(1);
-  }
-  if (!fname.empty()) {
-    output_file.open(fname);
-    if (!output_file.is_open()) {
-      Err << "invalid file name: '" << fname << std::endl;
-      std::exit(1);
-    }
-    if (!file_reporter) {
-      default_file_reporter = internal::CreateReporter(
-          FLAGS_benchmark_out_format, ConsoleReporter::OO_None);
-      file_reporter = default_file_reporter.get();
-    }
-    file_reporter->SetOutputStream(&output_file);
-    file_reporter->SetErrorStream(&output_file);
-  }
-
-  std::vector<internal::Benchmark::Instance> benchmarks;
+  std::vector<internal::BenchmarkInstance> benchmarks;
   if (!FindBenchmarksInternal(spec, &benchmarks, &Err)) return 0;
 
   if (benchmarks.empty()) {
@@ -659,9 +623,19 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* console_reporter,
   if (FLAGS_benchmark_list_tests) {
     for (auto const& benchmark : benchmarks) Out << benchmark.name << "\n";
   } else {
-    internal::RunBenchmarks(benchmarks, console_reporter, file_reporter);
-  }
+    JSON Res = internal::RunBenchmarks(benchmarks, console_reporter.get());
+    std::string const& fname = FLAGS_benchmark_out;
 
+    if (!fname.empty()) {
+      std::ofstream output_file;
+      output_file.open(fname);
+      if (!output_file.is_open()) {
+        Err << "invalid file name: '" << fname << std::endl;
+        std::exit(1);
+      }
+      output_file << Res << std::endl;
+    }
+  }
   return benchmarks.size();
 }
 
@@ -675,9 +649,9 @@ void PrintUsageAndExit() {
           "          [--benchmark_min_time=<min_time>]\n"
           "          [--benchmark_repetitions=<num_repetitions>]\n"
           "          [--benchmark_report_aggregates_only={true|false}\n"
-          "          [--benchmark_format=<console|json|csv>]\n"
+          "          [--benchmark_format=<console|json>]\n"
           "          [--benchmark_out=<filename>]\n"
-          "          [--benchmark_out_format=<json|console|csv>]\n"
+          "          [--benchmark_out_format=<json|console>]\n"
           "          [--benchmark_color={auto|true|false}]\n"
           "          [--benchmark_counters_tabular={true|false}]\n"
           "          [--v=<verbosity>]\n");
@@ -698,8 +672,6 @@ void ParseCommandLineFlags(int* argc, char** argv) {
                       &FLAGS_benchmark_report_aggregates_only) ||
         ParseStringFlag(argv[i], "benchmark_format", &FLAGS_benchmark_format) ||
         ParseStringFlag(argv[i], "benchmark_out", &FLAGS_benchmark_out) ||
-        ParseStringFlag(argv[i], "benchmark_out_format",
-                        &FLAGS_benchmark_out_format) ||
         ParseStringFlag(argv[i], "benchmark_color", &FLAGS_benchmark_color) ||
         // "color_print" is the deprecated name for "benchmark_color".
         // TODO: Remove this.
@@ -715,11 +687,9 @@ void ParseCommandLineFlags(int* argc, char** argv) {
       PrintUsageAndExit();
     }
   }
-  for (auto const* flag :
-       {&FLAGS_benchmark_format, &FLAGS_benchmark_out_format})
-    if (*flag != "console" && *flag != "json" && *flag != "csv") {
-      PrintUsageAndExit();
-    }
+  if (FLAGS_benchmark_format != "console" && FLAGS_benchmark_format != "json") {
+    PrintUsageAndExit();
+  }
   if (FLAGS_benchmark_color.empty()) {
     PrintUsageAndExit();
   }
@@ -737,6 +707,16 @@ void Initialize(int* argc, char** argv) {
   internal::LogLevel() = FLAGS_v;
 }
 
+BenchmarkInstanceList FindBenchmarks() {
+  return FindBenchmarks(FLAGS_benchmark_filter);
+}
+JSON RunBenchmarks(BenchmarkInstanceList const& Benches) {
+  // Setup the reporters
+  std::unique_ptr<BenchmarkReporter> console_reporter =
+      internal::CreateReporter(FLAGS_benchmark_format,
+                               internal::GetOutputOptions());
+  return internal::RunBenchmarks(Benches, console_reporter.get());
+}
 bool ReportUnrecognizedArguments(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     fprintf(stderr, "%s: error: unrecognized command-line flag: %s\n", argv[0], argv[i]);

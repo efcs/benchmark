@@ -42,21 +42,7 @@ SubMap& GetSubstitutions() {
       {" %s ", "[ ]+"},
       {"%time", "[ ]*[0-9]{1,5} ns"},
       {"%console_report", "[ ]*[0-9]{1,5} ns [ ]*[0-9]{1,5} ns [ ]*[0-9]+"},
-      {"%console_us_report", "[ ]*[0-9] us [ ]*[0-9] us [ ]*[0-9]+"},
-      {"%csv_header",
-       "name,iterations,real_time,cpu_time,time_unit,bytes_per_second,"
-       "items_per_second,label,error_occurred,error_message"},
-      {"%csv_report", "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ns,,,,,"},
-      {"%csv_us_report", "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",us,,,,,"},
-      {"%csv_bytes_report",
-       "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ns," + safe_dec_re + ",,,,"},
-      {"%csv_items_report",
-       "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ns,," + safe_dec_re + ",,,"},
-      {"%csv_bytes_items_report",
-       "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ns," + safe_dec_re +
-       "," + safe_dec_re + ",,,"},
-      {"%csv_label_report_begin", "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ns,,,"},
-      {"%csv_label_report_end", ",,"}};
+      {"%console_us_report", "[ ]*[0-9] us [ ]*[0-9] us [ ]*[0-9]+"}};
   return map;
 }
 
@@ -182,7 +168,6 @@ class ResultsChecker {
   void SetHeader_(const std::string& csv_header);
   void SetValues_(const std::string& entry_csv_line);
 
-  std::vector< std::string > SplitCsv_(const std::string& line);
 
 };
 
@@ -239,46 +224,6 @@ void ResultsChecker::CheckResults(std::stringstream& output) {
       VLOG(1) << "Checking results of " << r.name << ": OK.\n";
     }
   }
-}
-
-// prepare for the names in this header
-void ResultsChecker::SetHeader_(const std::string& csv_header) {
-  field_names = SplitCsv_(csv_header);
-}
-
-// set the values for a benchmark
-void ResultsChecker::SetValues_(const std::string& entry_csv_line) {
-  if(entry_csv_line.empty()) return; // some lines are empty
-  CHECK(!field_names.empty());
-  auto vals = SplitCsv_(entry_csv_line);
-  CHECK_EQ(vals.size(), field_names.size());
-  results.emplace_back(vals[0]); // vals[0] is the benchmark name
-  auto &entry = results.back();
-  for (size_t i = 1, e = vals.size(); i < e; ++i) {
-    entry.values[field_names[i]] = vals[i];
-  }
-}
-
-// a quick'n'dirty csv splitter (eliminating quotes)
-std::vector< std::string > ResultsChecker::SplitCsv_(const std::string& line) {
-  std::vector< std::string > out;
-  if(line.empty()) return out;
-  if(!field_names.empty()) out.reserve(field_names.size());
-  size_t prev = 0, pos = line.find_first_of(','), curr = pos;
-  while(pos != line.npos) {
-    CHECK(curr > 0);
-    if(line[prev] == '"') ++prev;
-    if(line[curr-1] == '"') --curr;
-    out.push_back(line.substr(prev, curr-prev));
-    prev = pos + 1;
-    pos = line.find_first_of(',', pos + 1);
-    curr = pos;
-  }
-  curr = line.size();
-  if(line[prev] == '"') ++prev;
-  if(line[curr-1] == '"') --curr;
-  out.push_back(line.substr(prev, curr-prev));
-  return out;
 }
 
 }  // end namespace internal
@@ -366,57 +311,23 @@ int SetSubstitutions(
 void RunOutputTests(int argc, char* argv[]) {
   using internal::GetTestCaseList;
   benchmark::Initialize(&argc, argv);
-  auto options = benchmark::internal::GetOutputOptions(/*force_no_color*/true);
-  benchmark::ConsoleReporter CR(options);
-  benchmark::JSONReporter JR;
-  benchmark::CSVReporter CSVR;
-  struct ReporterTest {
-    const char* name;
-    std::vector<TestCase>& output_cases;
-    std::vector<TestCase>& error_cases;
-    benchmark::BenchmarkReporter& reporter;
+
     std::stringstream out_stream;
     std::stringstream err_stream;
 
-    ReporterTest(const char* n, std::vector<TestCase>& out_tc,
-                 std::vector<TestCase>& err_tc,
-                 benchmark::BenchmarkReporter& br)
-        : name(n), output_cases(out_tc), error_cases(err_tc), reporter(br) {
-      reporter.SetOutputStream(&out_stream);
-      reporter.SetErrorStream(&err_stream);
-    }
-  } TestCases[] = {
-      {"ConsoleReporter", GetTestCaseList(TC_ConsoleOut),
-       GetTestCaseList(TC_ConsoleErr), CR},
-      {"JSONReporter", GetTestCaseList(TC_JSONOut), GetTestCaseList(TC_JSONErr),
-       JR},
-      {"CSVReporter", GetTestCaseList(TC_CSVOut), GetTestCaseList(TC_CSVErr),
-       CSVR},
-  };
-
   // Create the test reporter and run the benchmarks.
   std::cout << "Running benchmarks...\n";
-  internal::TestReporter test_rep({&CR, &JR, &CSVR});
-  benchmark::RunSpecifiedBenchmarks(&test_rep);
+  benchmark::RunSpecifiedBenchmarks(&out_stream, &err_stream);
 
-  for (auto& rep_test : TestCases) {
-    std::string msg = std::string("\nTesting ") + rep_test.name + " Output\n";
-    std::string banner(msg.size() - 1, '-');
-    std::cout << banner << msg << banner << "\n";
+  std::string msg = "\nTesting Console  Output\n";
+  std::string banner(msg.size() - 1, '-');
+  std::cout << banner << msg << banner << "\n";
 
-    std::cerr << rep_test.err_stream.str();
-    std::cout << rep_test.out_stream.str();
+  std::cerr << err_stream.str();
+  std::cout << out_stream.str();
 
-    internal::CheckCases(rep_test.error_cases, rep_test.err_stream);
-    internal::CheckCases(rep_test.output_cases, rep_test.out_stream);
+  internal::CheckCases(GetTestCaseList(TC_ConsoleErr), err_stream);
+  internal::CheckCases(GetTestCaseList(TC_ConsoleOut), out_stream);
 
-    std::cout << "\n";
-  }
-
-  // now that we know the output is as expected, we can dispatch
-  // the checks to subscribees.
-  auto &csv = TestCases[2];
-  // would use == but gcc spits a warning
-  CHECK(std::strcmp(csv.name, "CSVReporter") == 0);
-  internal::GetResultsChecker().CheckResults(csv.out_stream);
+  std::cout << "\n";
 }

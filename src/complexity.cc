@@ -149,7 +149,7 @@ LeastSq MinimalLeastSq(const std::vector<int>& n,
   return best_fit;
 }
 
-JSON ComputeBigO(const benchmark::internal::Benchmark::Instance& instance,
+JSON ComputeBigO(const internal::BenchmarkInstance& instance,
                  std::vector<JSON> const& reports) {
   if (reports.size() < 2) return JSON{};
 

@@ -40,10 +40,6 @@ struct TestCase {
 enum TestCaseID {
   TC_ConsoleOut,
   TC_ConsoleErr,
-  TC_JSONOut,
-  TC_JSONErr,
-  TC_CSVOut,
-  TC_CSVErr,
 
   TC_NumID  // PRIVATE
 };

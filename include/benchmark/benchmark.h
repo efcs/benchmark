@@ -248,6 +248,10 @@ namespace json_ns = nlohmann;
 using JSON = json_ns::json;
 #endif
 
+namespace internal {
+class BenchmarkInstance;
+}
+
 void Initialize(int* argc, char** argv);
 
 // Report to stdout all arguments in 'argv' as unrecognized except the first.
@@ -267,9 +271,15 @@ bool ReportUnrecognizedArguments(int argc, char** argv);
 //
 // RETURNS: The number of matching benchmarks.
 size_t RunSpecifiedBenchmarks();
-size_t RunSpecifiedBenchmarks(BenchmarkReporter* console_reporter);
-size_t RunSpecifiedBenchmarks(BenchmarkReporter* console_reporter,
-                              BenchmarkReporter* file_reporter);
+size_t RunSpecifiedBenchmarks(std::ostream* out, std::ostream* err);
+typedef std::vector<internal::BenchmarkInstance> BenchmarkInstanceList;
+
+#ifdef BENCHMARK_HAS_CXX11
+BenchmarkInstanceList FindBenchmarks();
+BenchmarkInstanceList FindBenchmarks(std::string const& Regex);
+JSON RunBenchmarks(BenchmarkInstanceList const&);
+
+#endif
 
 // If this routine is called, peak memory allocation past this point in the
 // benchmark is reported at the end of the benchmark report line. (It is
@@ -381,6 +391,29 @@ void from_json(const JSON& j, Counter& C);
 // for the measured time.
 enum TimeUnit { kNanosecond, kMicrosecond, kMillisecond };
 
+inline const char* GetTimeUnitString(TimeUnit unit) {
+  switch (unit) {
+    case kMillisecond:
+      return "ms";
+    case kMicrosecond:
+      return "us";
+    case kNanosecond:
+    default:
+      return "ns";
+  }
+}
+
+inline double GetTimeUnitMultiplier(TimeUnit unit) {
+  switch (unit) {
+    case kMillisecond:
+      return 1e3;
+    case kMicrosecond:
+      return 1e6;
+    case kNanosecond:
+    default:
+      return 1e9;
+  }
+}
 // BigO is passed to a benchmark in order to specify the asymptotic
 // computational
 // complexity for the benchmark. In case oAuto is selected, complexity will be
@@ -690,6 +723,17 @@ class BenchmarkInfoBase {
   BENCHMARK_DISALLOW_COPY_AND_ASSIGN(BenchmarkInfoBase);
 };
 
+// Used inside the benchmark implementation
+class BenchmarkInstance {
+ public:
+  std::string name;
+  Benchmark* benchmark;
+  const BenchmarkInfoBase* info;
+  std::vector<int> arg;
+  int threads;  // Number of concurrent threads to us
+  bool last_benchmark_instance;
+};
+
 // ------------------------------------------------------
 // Benchmark registration object.  The BENCHMARK() macro expands
 // into an internal::Benchmark* object.  Various methods can
@@ -849,16 +893,6 @@ class Benchmark : protected BenchmarkInfoBase {
 
   virtual void Run(State& state) = 0;
 
-  // Used inside the benchmark implementation
-  struct Instance {
-    std::string name;
-    Benchmark* benchmark;
-    const BenchmarkInfoBase* info;
-    std::vector<int> arg;
-    int threads;  // Number of concurrent threads to us
-    bool last_benchmark_instance;
-  };
-
  protected:
   explicit Benchmark(const char* name);
   Benchmark(Benchmark const&);
@@ -870,6 +904,7 @@ class Benchmark : protected BenchmarkInfoBase {
 
  private:
   friend class BenchmarkFamilies;
+  friend class BenchmarkInstance;
 
   Benchmark& operator=(Benchmark const&);
 };
@@ -1175,155 +1210,5 @@ class Fixture : public internal::Benchmark {
     ::benchmark::RunSpecifiedBenchmarks(); \
   }
 
-
-// ------------------------------------------------------
-// Benchmark Reporters
-
-namespace benchmark {
-
-#ifdef BENCHMARK_HAS_CXX11
-
-// Interface for custom benchmark result printers.
-// By default, benchmark reports are printed to stdout. However an application
-// can control the destination of the reports by calling
-// RunSpecifiedBenchmarks and passing it a custom reporter object.
-// The reporter object must implement the following interface.
-class BenchmarkReporter {
- public:
-  // Construct a BenchmarkReporter with the output stream set to 'std::cout'
-  // and the error stream set to 'std::cerr'
-  BenchmarkReporter();
-
-  // Called once for every suite of benchmarks run.
-  // The parameter "context" contains information that the
-  // reporter may wish to use when generating its report, for example the
-  // platform under which the benchmarks are running. The benchmark run is
-  // never started if this function returns false, allowing the reporter
-  // to skip runs based on the context information.
-  virtual bool ReportContext(const JSON& context) = 0;
-
-  // Called once for each group of benchmark runs, gives information about
-  // cpu-time and heap memory usage during the benchmark run. If the group
-  // of runs contained more than two entries then 'report' contains additional
-  // elements representing the mean and standard deviation of those runs.
-  // Additionally if this group of runs was the last in a family of benchmarks
-  // 'reports' contains additional entries representing the asymptotic
-  // complexity and RMS of that benchmark family.
-  virtual void ReportResults(const JSON& result) = 0;
-
-  // Called once and only once after ever group of benchmarks is run and
-  // reported.
-  virtual void Finalize() {}
-
-  // REQUIRES: The object referenced by 'out' is valid for the lifetime
-  // of the reporter.
-  void SetOutputStream(std::ostream* out) {
-    assert(out);
-    output_stream_ = out;
-  }
-
-  // REQUIRES: The object referenced by 'err' is valid for the lifetime
-  // of the reporter.
-  void SetErrorStream(std::ostream* err) {
-    assert(err);
-    error_stream_ = err;
-  }
-
-  std::ostream& GetOutputStream() const { return *output_stream_; }
-
-  std::ostream& GetErrorStream() const { return *error_stream_; }
-
-  virtual ~BenchmarkReporter();
-
-  // Write a human readable string to 'out' representing the specified
-  // 'context'.
-  // REQUIRES: 'out' is non-null.
-  static void PrintBasicContext(std::ostream* out, JSON const& context);
-
- private:
-  std::ostream* output_stream_;
-  std::ostream* error_stream_;
-};
-
-// Simple reporter that outputs benchmark data to the console. This is the
-// default reporter used by RunSpecifiedBenchmarks().
-class ConsoleReporter : public BenchmarkReporter {
-public:
-  enum OutputOptions {
-    OO_None = 0,
-    OO_Color = 1,
-    OO_Tabular = 2,
-    OO_ColorTabular = OO_Color|OO_Tabular,
-    OO_Defaults = OO_ColorTabular
-  };
-  explicit ConsoleReporter(OutputOptions opts_ = OO_Defaults)
-      : output_options_(opts_), name_field_width_(0),
-        prev_counters_(), printed_header_(false) {}
-
-  virtual bool ReportContext(const JSON& context);
-  virtual void ReportResults(const JSON& result);
-
- protected:
-  virtual void PrintRunData(JSON const& report);
-  virtual void PrintHeader(const JSON& report);
-
-  OutputOptions output_options_;
-  size_t name_field_width_;
-  UserCounters prev_counters_;
-  bool printed_header_;
-};
-
-class JSONReporter : public BenchmarkReporter {
- public:
-  JSONReporter() : first_report_(true) {}
-  virtual bool ReportContext(const JSON& context);
-  virtual void ReportResults(const JSON& result);
-  virtual void Finalize();
-
- private:
-
-  bool first_report_;
-};
-
-class CSVReporter : public BenchmarkReporter {
- public:
-  CSVReporter() : printed_header_(false) {}
-  virtual bool ReportContext(const JSON& context);
-  virtual void ReportResults(const JSON& result);
-
- private:
-  void PrintRunData(JSON const& run);
-
-  bool printed_header_;
-  std::set< std::string > user_counter_names_;
-};
-
-#endif  // BENCHMARK_HAS_CXX11
-
-inline const char* GetTimeUnitString(TimeUnit unit) {
-  switch (unit) {
-    case kMillisecond:
-      return "ms";
-    case kMicrosecond:
-      return "us";
-    case kNanosecond:
-    default:
-      return "ns";
-  }
-}
-
-inline double GetTimeUnitMultiplier(TimeUnit unit) {
-  switch (unit) {
-    case kMillisecond:
-      return 1e3;
-    case kMicrosecond:
-      return 1e6;
-    case kNanosecond:
-    default:
-      return 1e9;
-  }
-}
-
-} // namespace benchmark
 
 #endif  // BENCHMARK_BENCHMARK_H_

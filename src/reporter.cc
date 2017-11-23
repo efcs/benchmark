@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "check.h"
+#include "reporter.h"
 
 namespace benchmark {
 
