@@ -44,6 +44,7 @@
 #include "re.h"
 #include "statistics.h"
 #include "string_util.h"
+#include "sysinfo.h"
 #include "timers.h"
 
 DEFINE_bool(benchmark_list_tests, false,
@@ -105,6 +106,10 @@ static const size_t kMaxIterations = 1000000000;
 }  // end namespace
 
 namespace internal {
+
+bool IsZero(double n) {
+  return std::abs(n) < std::numeric_limits<double>::epsilon();
+}
 
 void UseCharPointer(char const volatile*) {}
 
@@ -225,47 +230,57 @@ class ThreadTimer {
 
 namespace {
 
-BenchmarkReporter::Run CreateRunReport(
-    const benchmark::internal::Benchmark::Instance& b,
-    const internal::ThreadManager::Result& results, size_t iters,
-    double seconds) {
+JSON CreateRunReport(const benchmark::internal::Benchmark::Instance& b,
+                     const internal::ThreadManager::Result& results,
+                     size_t iters, double seconds) {
   // Create report about this benchmark run.
-  BenchmarkReporter::Run report;
 
-  report.benchmark_name = b.name;
-  report.error_occurred = results.has_error_;
-  report.error_message = results.error_message_;
-  report.report_label = results.report_label_;
   // Report the total iterations across all threads.
-  report.iterations = static_cast<int64_t>(iters) * b.threads;
-  report.time_unit = b.time_unit;
+  int64_t iterations = static_cast<int64_t>(iters) * b.threads;
 
-  if (!report.error_occurred) {
-    double bytes_per_second = 0;
+  JSON json_report = {
+      {"name", b.name},
+      {"kind", results.has_error_ ? "error" : "normal"},
+      {"iterations", static_cast<int64_t>(iters) * b.threads},
+  };
+  if (!results.report_label_.empty())
+    json_report["label"] = results.report_label_;
+  if (results.has_error_) json_report["error_message"] = results.error_message_;
+
+  if (!results.has_error_) {
+    json_report["time_unit"] = GetTimeUnitString(b.time_unit);
+    auto UnitMul = GetTimeUnitMultiplier(b.time_unit);
+
     if (results.bytes_processed > 0 && seconds > 0.0) {
-      bytes_per_second = (results.bytes_processed / seconds);
+      json_report["bytes_per_second"] = (results.bytes_processed / seconds);
     }
-    double items_per_second = 0;
     if (results.items_processed > 0 && seconds > 0.0) {
-      items_per_second = (results.items_processed / seconds);
+      json_report["items_per_second"] = (results.items_processed / seconds);
     }
 
-    if (b.use_manual_time) {
-      report.real_accumulated_time = results.manual_time_used;
-    } else {
-      report.real_accumulated_time = results.real_time_used;
-    }
-    report.cpu_accumulated_time = results.cpu_time_used;
-    report.bytes_per_second = bytes_per_second;
-    report.items_per_second = items_per_second;
-    report.complexity_n = results.complexity_n;
-    report.complexity = b.complexity;
-    report.complexity_lambda = b.complexity_lambda;
-    report.statistics = b.statistics;
-    report.counters = results.counters;
-    internal::Finish(&report.counters, seconds, b.threads);
+    double real_time =
+        b.use_manual_time ? results.manual_time_used : results.real_time_used;
+    real_time *= UnitMul;
+    json_report["real_accumulated_time"] = real_time;
+    json_report["real_iteration_time"] =
+        real_time / static_cast<double>(iterations);
+    double cpu_time = results.cpu_time_used * UnitMul;
+    json_report["cpu_accumulated_time"] = cpu_time;
+    json_report["cpu_iteration_time"] =
+        cpu_time / static_cast<double>(iterations);
+
+    if (results.complexity_n != 0)
+      json_report["complexity_n"] = results.complexity_n;
+    if (b.complexity != 0) json_report["complexity"] = b.complexity;
+
+    // report.statistics = b.statistics;
+    auto counters_cp = results.counters;
+    internal::Finish(&counters_cp, seconds, b.threads);
+
+    JSON counters = counters_cp;
+    json_report["counters"] = counters;
   }
-  return report;
+  return json_report;
 }
 
 // Execute one thread of benchmark b for the specified number of iterations.
@@ -292,10 +307,9 @@ void RunInThread(const benchmark::internal::Benchmark::Instance* b,
   manager->NotifyThreadComplete();
 }
 
-std::vector<BenchmarkReporter::Run> RunBenchmark(
-    const benchmark::internal::Benchmark::Instance& b,
-    std::vector<BenchmarkReporter::Run>* complexity_reports) {
-  std::vector<BenchmarkReporter::Run> reports;  // return value
+JSON RunBenchmark(const benchmark::internal::Benchmark::Instance& b,
+                  std::vector<JSON>* complexity_reports) {
+  std::vector<JSON> run_reports;
 
   const bool has_explicit_iteration_count = b.iterations != 0;
   size_t iters = has_explicit_iteration_count ? b.iterations : 1;
@@ -303,11 +317,7 @@ std::vector<BenchmarkReporter::Run> RunBenchmark(
   std::vector<std::thread> pool(b.threads - 1);
   const int repeats =
       b.repetitions != 0 ? b.repetitions : FLAGS_benchmark_repetitions;
-  const bool report_aggregates_only =
-      repeats != 1 &&
-      (b.report_mode == internal::RM_Unspecified
-           ? FLAGS_benchmark_report_aggregates_only
-           : b.report_mode == internal::RM_ReportAggregatesOnly);
+
   for (int repetition_num = 0; repetition_num < repeats; repetition_num++) {
     for (;;) {
       // Try benchmark
@@ -358,11 +368,11 @@ std::vector<BenchmarkReporter::Run> RunBenchmark(
         || ((results.real_time_used >= 5 * min_time) && !b.use_manual_time);
 
       if (should_report) {
-        BenchmarkReporter::Run report =
-            CreateRunReport(b, results, iters, seconds);
-        if (!report.error_occurred && b.complexity != oNone)
+        JSON report = CreateRunReport(b, results, iters, seconds);
+        bool IsError = report.at("kind").get<std::string>() == "error";
+        if (!IsError && b.complexity != oNone)
           complexity_reports->push_back(report);
-        reports.push_back(report);
+        run_reports.push_back(report);
         break;
       }
 
@@ -385,18 +395,28 @@ std::vector<BenchmarkReporter::Run> RunBenchmark(
       iters = static_cast<int>(next_iters + 0.5);
     }
   }
+
   // Calculate additional statistics
-  auto stat_reports = ComputeStats(reports);
+  auto stat_reports = ComputeStats(run_reports, b.info->statistics_);
   if ((b.complexity != oNone) && b.last_benchmark_instance) {
-    auto additional_run_stats = ComputeBigO(*complexity_reports);
+    auto additional_run_stats = ComputeBigO(b, *complexity_reports);
     stat_reports.insert(stat_reports.end(), additional_run_stats.begin(),
                         additional_run_stats.end());
     complexity_reports->clear();
   }
 
-  if (report_aggregates_only) reports.clear();
-  reports.insert(reports.end(), stat_reports.begin(), stat_reports.end());
-  return reports;
+  const bool report_aggregates_only =
+      repeats != 1 &&
+      (b.report_mode == internal::RM_Unspecified
+           ? FLAGS_benchmark_report_aggregates_only
+           : b.report_mode == internal::RM_ReportAggregatesOnly);
+
+  JSON reports_json = {{"name", b.name},
+                       {"family", b.info->index_},
+                       {"runs", run_reports},
+                       {"stats", stat_reports},
+                       {"report_aggregates_only", report_aggregates_only}};
+  return reports_json;
 }
 
 }  // namespace
@@ -494,17 +514,24 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
         std::max<size_t>(name_field_width, benchmark.name.size());
     has_repetitions |= benchmark.repetitions > 1;
 
-    for(const auto& Stat : *benchmark.statistics)
+    for (const auto& Stat : benchmark.info->statistics_)
       stat_field_width = std::max<size_t>(stat_field_width, Stat.name_.size());
   }
   if (has_repetitions) name_field_width += 1 + stat_field_width;
 
+#if defined(NDEBUG)
+  const char build_type[] = "release";
+#else
+  const char build_type[] = "debug";
+#endif
   // Print header here
-  BenchmarkReporter::Context context;
-  context.name_field_width = name_field_width;
+  JSON context{{"name_field_width", name_field_width},
+               {"date", LocalDateTimeString()},
+               {"library_build_type", build_type},
+               {"cpu_info", CPUInfo::Get()}};
 
   // Keep track of runing times of all instances of current benchmark
-  std::vector<BenchmarkReporter::Run> complexity_reports;
+  std::vector<JSON> complexity_reports;
 
   // We flush streams after invoking reporter methods that write to them. This
   // ensures users get timely updates even when streams are not line-buffered.
@@ -519,10 +546,9 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
     flushStreams(console_reporter);
     flushStreams(file_reporter);
     for (const auto& benchmark : benchmarks) {
-      std::vector<BenchmarkReporter::Run> reports =
-          RunBenchmark(benchmark, &complexity_reports);
-      console_reporter->ReportRuns(reports);
-      if (file_reporter) file_reporter->ReportRuns(reports);
+      JSON report = RunBenchmark(benchmark, &complexity_reports);
+      console_reporter->ReportResults(report);
+      if (file_reporter) file_reporter->ReportResults(report);
       flushStreams(console_reporter);
       flushStreams(file_reporter);
     }
@@ -549,10 +575,6 @@ std::unique_ptr<BenchmarkReporter> CreateReporter(
 }
 
 }  // end namespace
-
-bool IsZero(double n) {
-  return std::abs(n) < std::numeric_limits<double>::epsilon();
-}
 
 ConsoleReporter::OutputOptions GetOutputOptions(bool force_no_color) {
   int output_opts = ConsoleReporter::OO_Defaults;

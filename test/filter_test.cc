@@ -14,13 +14,9 @@ namespace {
 
 class TestReporter : public benchmark::ConsoleReporter {
  public:
-  virtual bool ReportContext(const Context& context) {
-    return ConsoleReporter::ReportContext(context);
-  };
-
-  virtual void ReportRuns(const std::vector<Run>& report) {
+  virtual void ReportResults(benchmark::JSON const& report) override {
     ++count_;
-    ConsoleReporter::ReportRuns(report);
+    ConsoleReporter::ReportResults(report);
   };
 
   TestReporter() : count_(0) {}

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "benchmark/benchmark.h"
+#include "sysinfo.h"
 #include "timers.h"
 
 #include <cstdlib>
@@ -31,25 +32,26 @@ BenchmarkReporter::BenchmarkReporter()
 BenchmarkReporter::~BenchmarkReporter() {}
 
 void BenchmarkReporter::PrintBasicContext(std::ostream *out,
-                                          Context const &context) {
+                                          JSON const &context) {
   CHECK(out) << "cannot be null";
   auto &Out = *out;
 
   Out << LocalDateTimeString() << "\n";
 
-  const CPUInfo &info = context.cpu_info;
-  Out << "Run on (" << info.num_cpus << " X "
-      << (info.cycles_per_second / 1000000.0) << " MHz CPU "
-      << ((info.num_cpus > 1) ? "s" : "") << ")\n";
-  if (info.caches.size() != 0) {
+  JSON info = context.at("cpu_info");
+  Out << "Run on (" << info.get_at<int>("num_cpus") << " X "
+      << (info.get_at<double>("cycles_per_second") / 1000000.0) << " MHz CPU "
+      << ((info.get_at<int>("num_cpus") > 1) ? "s" : "") << ")\n";
+  std::vector<CPUInfo::CacheInfo> caches = info.at("caches");
+  if (caches.size() != 0) {
     Out << "CPU Caches:\n";
-    for (auto &CInfo : info.caches) {
+    for (auto &CInfo : caches) {
       Out << "  L" << CInfo.level << " " << CInfo.type << " "
           << (CInfo.size / 1000) << "K\n";
     }
   }
 
-  if (info.scaling_enabled) {
+  if (info.get_at<bool>("scaling_enabled")) {
     Out << "***WARNING*** CPU scaling is enabled, the benchmark "
            "real time measurements may be noisy and will incur extra "
            "overhead.\n";
@@ -61,18 +63,6 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 #endif
 }
 
-BenchmarkReporter::Context::Context() : cpu_info(CPUInfo::Get()) {}
 
-double BenchmarkReporter::Run::GetAdjustedRealTime() const {
-  double new_time = real_accumulated_time * GetTimeUnitMultiplier(time_unit);
-  if (iterations != 0) new_time /= static_cast<double>(iterations);
-  return new_time;
-}
-
-double BenchmarkReporter::Run::GetAdjustedCPUTime() const {
-  double new_time = cpu_accumulated_time * GetTimeUnitMultiplier(time_unit);
-  if (iterations != 0) new_time /= static_cast<double>(iterations);
-  return new_time;
-}
 
 }  // end namespace benchmark

@@ -10,19 +10,15 @@ namespace {
 
 class TestReporter : public benchmark::ConsoleReporter {
  public:
-  virtual bool ReportContext(const Context& context) {
-    return ConsoleReporter::ReportContext(context);
-  };
-
-  virtual void ReportRuns(const std::vector<Run>& report) {
-    all_runs_.insert(all_runs_.end(), begin(report), end(report));
-    ConsoleReporter::ReportRuns(report);
+  virtual void ReportResults(const benchmark::JSON& JS) override {
+    all_runs_.push_back(JS);
+    ConsoleReporter::ReportResults(JS);
   }
 
   TestReporter() {}
   virtual ~TestReporter() {}
 
-  mutable std::vector<Run> all_runs_;
+  mutable std::vector<benchmark::JSON> all_runs_;
 };
 
 struct TestCase {
@@ -30,17 +26,20 @@ struct TestCase {
   bool error_occurred;
   std::string error_message;
 
-  typedef benchmark::BenchmarkReporter::Run Run;
+  void CheckRun(benchmark::JSON const& json_root) const {
+    CHECK(json_root.at("stats").size() == 0);
+    CHECK(json_root.at("runs").size() == 1);
+    benchmark::JSON json = json_root.at("runs")[0];
+    std::string BName = json.at("name");
 
-  void CheckRun(Run const& run) const {
-    CHECK(name == run.benchmark_name) << "expected " << name << " got "
-                                      << run.benchmark_name;
-    CHECK(error_occurred == run.error_occurred);
-    CHECK(error_message == run.error_message);
-    if (error_occurred) {
-      // CHECK(run.iterations == 0);
+    CHECK(name == BName) << "expected " << name << " got " << BName;
+    std::string Kind = json.at("kind");
+    CHECK((Kind == "error") == error_occurred);
+    if (Kind == "error") {
+      std::string Msg = json.at("error_message");
+      CHECK(error_message == Msg);
     } else {
-      CHECK(run.iterations != 0);
+      CHECK(json.count("error_message") == 0);
     }
   }
 };
@@ -168,10 +167,9 @@ int main(int argc, char* argv[]) {
   TestReporter test_reporter;
   benchmark::RunSpecifiedBenchmarks(&test_reporter);
 
-  typedef benchmark::BenchmarkReporter::Run Run;
   auto EB = ExpectedResults.begin();
 
-  for (Run const& run : test_reporter.all_runs_) {
+  for (benchmark::JSON const& run : test_reporter.all_runs_) {
     assert(EB != ExpectedResults.end());
     EB->CheckRun(run);
     ++EB;

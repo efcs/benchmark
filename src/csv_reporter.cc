@@ -37,12 +37,14 @@ std::vector<std::string> elements = {
     "error_occurred", "error_message"};
 }  // namespace
 
-bool CSVReporter::ReportContext(const Context& context) {
+bool CSVReporter::ReportContext(const JSON& context) {
   PrintBasicContext(&GetErrorStream(), context);
   return true;
 }
 
-void CSVReporter::ReportRuns(const std::vector<Run> & reports) {
+void CSVReporter::ReportResults(const JSON& results) {
+  ((void)results);
+#if 0
   std::ostream& Out = GetOutputStream();
 
   if (!printed_header_) {
@@ -80,18 +82,20 @@ void CSVReporter::ReportRuns(const std::vector<Run> & reports) {
   for (const auto& run : reports) {
     PrintRunData(run);
   }
-
+#endif
 }
 
-void CSVReporter::PrintRunData(const Run & run) {
+void CSVReporter::PrintRunData(JSON const& Run) {
+  // FIXME
+#if 0
   std::ostream& Out = GetOutputStream();
 
   // Field with embedded double-quote characters must be doubled and the field
   // delimited with double-quotes.
-  std::string name = run.benchmark_name;
+  std::string name = Run.at("name");
   ReplaceAll(&name, "\"", "\"\"");
   Out << '"' << name << "\",";
-  if (run.error_occurred) {
+  if (Run.at("kind") .error_occurred) {
     Out << std::string(elements.size() - 3, ',');
     Out << "true,";
     std::string msg = run.error_message;
@@ -144,6 +148,7 @@ void CSVReporter::PrintRunData(const Run & run) {
     }
   }
   Out << '\n';
+#endif
 }
 
 }  // end namespace benchmark

@@ -33,8 +33,8 @@
 
 namespace benchmark {
 
-bool ConsoleReporter::ReportContext(const Context& context) {
-  name_field_width_ = context.name_field_width;
+bool ConsoleReporter::ReportContext(const JSON& context) {
+  name_field_width_ = context.at("name_field_width");
   printed_header_ = false;
   prev_counters_.clear();
 
@@ -52,12 +52,14 @@ bool ConsoleReporter::ReportContext(const Context& context) {
   return true;
 }
 
-void ConsoleReporter::PrintHeader(const Run& run) {
+void ConsoleReporter::PrintHeader(const JSON& run) {
   std::string str = FormatString("%-*s %13s %13s %10s", static_cast<int>(name_field_width_),
                                  "Benchmark", "Time", "CPU", "Iterations");
-  if(!run.counters.empty()) {
+
+  if (run.count("counters") != 0 && !run.at("counters").empty()) {
+    UserCounters counters = run.at("counters");
     if(output_options_ & OO_Tabular) {
-      for(auto const& c : run.counters) {
+      for (auto const& c : counters) {
         str += FormatString(" %10s", c.first.c_str());
       }
     } else {
@@ -69,27 +71,6 @@ void ConsoleReporter::PrintHeader(const Run& run) {
   GetOutputStream() << line << "\n" << str << line << "\n";
 }
 
-void ConsoleReporter::ReportRuns(const std::vector<Run>& reports) {
-  for (const auto& run : reports) {
-    // print the header:
-    // --- if none was printed yet
-    bool print_header = !printed_header_;
-    // --- or if the format is tabular and this run
-    //     has different fields from the prev header
-    print_header |= (output_options_ & OO_Tabular) &&
-                    (!internal::SameNames(run.counters, prev_counters_));
-    if (print_header) {
-      printed_header_ = true;
-      prev_counters_ = run.counters;
-      PrintHeader(run);
-    }
-    // As an alternative to printing the headers like this, we could sort
-    // the benchmarks by header and then print. But this would require
-    // waiting for the full results before printing, or printing twice.
-    PrintRunData(run);
-  }
-}
-
 static void IgnoreColorPrint(std::ostream& out, LogColor, const char* fmt,
                              ...) {
   va_list args;
@@ -98,58 +79,81 @@ static void IgnoreColorPrint(std::ostream& out, LogColor, const char* fmt,
   va_end(args);
 }
 
-void ConsoleReporter::PrintRunData(const Run& result) {
-  typedef void(PrinterFn)(std::ostream&, LogColor, const char*, ...);
-  auto& Out = GetOutputStream();
-  PrinterFn* printer = (output_options_ & OO_Color) ?
-                         (PrinterFn*)ColorPrintf : IgnoreColorPrint;
-  auto name_color =
-      (result.report_big_o || result.report_rms) ? COLOR_BLUE : COLOR_GREEN;
-  printer(Out, name_color, "%-*s ", name_field_width_,
-          result.benchmark_name.c_str());
+typedef void(PrinterFn)(std::ostream&, LogColor, const char*, ...);
 
-  if (result.error_occurred) {
+void ConsoleReporter::ReportResults(JSON const& result) {
+  auto ReportSingle = [&, this](const JSON run) {
+    // print the header:
+    // --- if none was printed yet
+    bool print_header = !printed_header_;
+    // --- or if the format is tabular and this run
+    //     has different fields from the prev header
+    UserCounters counters = run.at("counters");
+    print_header |= (output_options_ & OO_Tabular) &&
+                    (!internal::SameNames(counters, prev_counters_));
+    if (print_header) {
+      printed_header_ = true;
+      prev_counters_ = counters;
+      PrintHeader(run);
+    }
+    // As an alternative to printing the headers like this, we could sort
+    // the benchmarks by header and then print. But this would require
+    // waiting for the full results before printing, or printing twice.
+    PrintRunData(run);
+  };
+  JSON runs = result.at("runs");
+  for (JSON R : runs) ReportSingle(R);
+}
+
+static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
+                           ConsoleReporter::OutputOptions output_options,
+                           const JSON& result) {
+  std::string Name = result.at("name");
+  std::string Kind = result.at("kind");
+
+  if (result.get_at<std::string>("kind") == "error") {
     printer(Out, COLOR_RED, "ERROR OCCURRED: \'%s\'",
-            result.error_message.c_str());
+            result.get_at<std::string>("error_message").c_str());
     printer(Out, COLOR_DEFAULT, "\n");
     return;
   }
+
   // Format bytes per second
-  std::string rate;
-  if (result.bytes_per_second > 0) {
-    rate = StrCat(" ", HumanReadableNumber(result.bytes_per_second), "B/s");
+  if (result.count("bytes_per_second") != 0) {
+    std::string rate = StrCat(
+        " ", HumanReadableNumber(result.get_at<double>("bytes_per_second")),
+        "B/s");
+    printer(Out, COLOR_DEFAULT, " %*s", 13, rate.c_str());
   }
 
   // Format items per second
-  std::string items;
-  if (result.items_per_second > 0) {
-    items =
-        StrCat(" ", HumanReadableNumber(result.items_per_second), " items/s");
+  if (result.count("items_per_second") != 0) {
+    std::string items = StrCat(
+        " ", HumanReadableNumber(result.get_at<double>("items_per_second")),
+        " items/s");
+    printer(Out, COLOR_DEFAULT, " %*s", 18, items.c_str());
   }
 
-  const double real_time = result.GetAdjustedRealTime();
-  const double cpu_time = result.GetAdjustedCPUTime();
+  const double real_time = result.at("real_iteration_time");
+  const double cpu_time = result.at("cpu_iteration_time");
+  const std::string timeLabel = result.at("time_unit");
+  // const double time_unit_mul = result.at("time_unit_multiplier");
+  // FIXME:const char* timeLabel = GetTimeUnitString(result.time_unit);
+  printer(Out, COLOR_YELLOW, "%10.0f %s %10.0f %s ", real_time,
+          timeLabel.c_str(), cpu_time, timeLabel.c_str());
 
-  if (result.report_big_o) {
-    std::string big_o = GetBigOString(result.complexity);
-    printer(Out, COLOR_YELLOW, "%10.2f %s %10.2f %s ", real_time, big_o.c_str(),
-            cpu_time, big_o.c_str());
-  } else if (result.report_rms) {
-    printer(Out, COLOR_YELLOW, "%10.0f %% %10.0f %% ", real_time * 100,
-            cpu_time * 100);
-  } else {
-    const char* timeLabel = GetTimeUnitString(result.time_unit);
-    printer(Out, COLOR_YELLOW, "%10.0f %s %10.0f %s ", real_time, timeLabel,
-            cpu_time, timeLabel);
+  if (result.count("iterations") != 0) {
+    printer(Out, COLOR_CYAN, "%10lld", result.get_at<int64_t>("iterations"));
+  }
+  if (result.count("label") != 0) {
+    printer(Out, COLOR_DEFAULT, " %s",
+            result.get_at<std::string>("label").c_str());
   }
 
-  if (!result.report_big_o && !result.report_rms) {
-    printer(Out, COLOR_CYAN, "%10lld", result.iterations);
-  }
-
-  for (auto& c : result.counters) {
+  UserCounters counters = result.at("counters");
+  for (auto& c : counters) {
     auto const& s = HumanReadableNumber(c.second.value, 1000);
-    if (output_options_ & OO_Tabular) {
+    if (output_options & ConsoleReporter::OO_Tabular) {
       if (c.second.flags & Counter::kIsRate) {
         printer(Out, COLOR_DEFAULT, " %8s/s", s.c_str());
       } else {
@@ -161,17 +165,44 @@ void ConsoleReporter::PrintRunData(const Run& result) {
               unit);
     }
   }
+}
 
-  if (!rate.empty()) {
-    printer(Out, COLOR_DEFAULT, " %*s", 13, rate.c_str());
-  }
+static void PrintComplexityRun(std::ostream& Out, PrinterFn* printer,
+                               const JSON& result) {
+  std::string Name = result.at("name");
+  std::string Kind = result.at("kind");
 
-  if (!items.empty()) {
-    printer(Out, COLOR_DEFAULT, " %*s", 18, items.c_str());
-  }
+  JSON BigO = result.at("big_o");
+  JSON RMS = result.at("rms");
 
-  if (!result.report_label.empty()) {
-    printer(Out, COLOR_DEFAULT, " %s", result.report_label.c_str());
+  std::string big_o = result["complexity_string"];
+  printer(Out, COLOR_YELLOW, "%10.2f %s %10.2f %s ",
+          BigO.get_at<double>("real_time_coefficient"), big_o.c_str(),
+          BigO.get_at<double>("cpu_time_coefficient"), big_o.c_str());
+  printer(Out, COLOR_YELLOW, "%10.0f %% %10.0f %% ",
+          RMS.get_at<double>("real_time") * 100,
+          RMS.get_at<double>("cpu_time") * 100);
+}
+
+void ConsoleReporter::PrintRunData(const JSON& result) {
+  auto& Out = GetOutputStream();
+  PrinterFn* printer =
+      (output_options_ & OO_Color) ? (PrinterFn*)ColorPrintf : IgnoreColorPrint;
+  std::string Name = result.at("name");
+  std::string Kind = result.at("kind");
+
+  auto name_color = (Kind == "complexity") ? COLOR_BLUE : COLOR_GREEN;
+  printer(Out, name_color, "%-*s ", name_field_width_, Name.c_str());
+  if (Kind == "normal" || Kind == "error") {
+    PrintNormalRun(Out, printer, output_options_, result);
+  } else if (Kind == "complexity") {
+    PrintComplexityRun(Out, printer, result);
+  } else if (Kind == "statistic") {
+    PrintNormalRun(Out, printer, output_options_, result);
+  } else {
+    // FIXME: Do something
+    std::cerr << "Unknown thing!" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   printer(Out, COLOR_DEFAULT, "\n");

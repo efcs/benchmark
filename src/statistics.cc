@@ -72,14 +72,13 @@ double StatisticsStdDev(const std::vector<double>& v) {
   return Sqrt(v.size() / (v.size() - 1.0) * (avg_squares - Sqr(mean)));
 }
 
-std::vector<BenchmarkReporter::Run> ComputeStats(
-    const std::vector<BenchmarkReporter::Run>& reports) {
-  typedef BenchmarkReporter::Run Run;
-  std::vector<Run> results;
-
+std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
+                               std::vector<Statistics> const& stats) {
+  std::vector<JSON> results;
   auto error_count =
-      std::count_if(reports.begin(), reports.end(),
-                    [](Run const& run) { return run.error_occurred; });
+      std::count_if(reports.begin(), reports.end(), [](JSON const& run) {
+        return run.get_at<std::string>("kind") == "error";
+      });
 
   if (reports.size() - error_count < 2) {
     // We don't report aggregated data if there was a single run.
@@ -99,15 +98,16 @@ std::vector<BenchmarkReporter::Run> ComputeStats(
 
   // All repetitions should be run with the same number of iterations so we
   // can take this information from the first benchmark.
-  int64_t const run_iterations = reports.front().iterations;
+  int64_t const run_iterations = reports.front().at("iterations");
   // create stats for user counters
   struct CounterStat {
     Counter c;
     std::vector<double> s;
   };
   std::map< std::string, CounterStat > counter_stats;
-  for(Run const& r : reports) {
-    for(auto const& cnt : r.counters) {
+  for (JSON const& r : reports) {
+    UserCounters UC = r.at("counters");
+    for (auto const& cnt : UC) {
       auto it = counter_stats.find(cnt.first);
       if(it == counter_stats.end()) {
         counter_stats.insert({cnt.first, {cnt.second, std::vector<double>{}}});
@@ -120,16 +120,22 @@ std::vector<BenchmarkReporter::Run> ComputeStats(
   }
 
   // Populate the accumulators.
-  for (Run const& run : reports) {
-    CHECK_EQ(reports[0].benchmark_name, run.benchmark_name);
-    CHECK_EQ(run_iterations, run.iterations);
-    if (run.error_occurred) continue;
-    real_accumulated_time_stat.emplace_back(run.real_accumulated_time);
-    cpu_accumulated_time_stat.emplace_back(run.cpu_accumulated_time);
-    items_per_second_stat.emplace_back(run.items_per_second);
-    bytes_per_second_stat.emplace_back(run.bytes_per_second);
+  for (JSON const& run : reports) {
+    std::string Name = run.at("name");
+
+    //  CHECK_EQ(reports[0].json_report.get_at<std::string>("name"), Name);
+    // CHECK_EQ(run_iterations, run.iterations);
+    std::string Kind = run.at("kind");
+    if (Kind == "error") continue;
+    real_accumulated_time_stat.emplace_back(
+        run.get_at<double>("real_accumulated_time"));
+    cpu_accumulated_time_stat.emplace_back(
+        run.get_at<double>("cpu_accumulated_time"));
+    items_per_second_stat.emplace_back(run.get_at<double>("items_per_second"));
+    bytes_per_second_stat.emplace_back(run.get_at<double>("bytes_per_second"));
     // user counters
-    for(auto const& cnt : run.counters) {
+    UserCounters UC = run["counters"];
+    for (auto const& cnt : UC) {
       auto it = counter_stats.find(cnt.first);
       CHECK_NE(it, counter_stats.end());
       it->second.s.emplace_back(cnt.second);
@@ -137,34 +143,45 @@ std::vector<BenchmarkReporter::Run> ComputeStats(
   }
 
   // Only add label if it is same for all runs
-  std::string report_label = reports[0].report_label;
+  auto GetLabel = [](JSON const& R) {
+    std::string res;
+    if (R.count("label") != 0) res = R.at("label");
+    return res;
+  };
+
+  std::string report_label = GetLabel(reports[0]);
   for (std::size_t i = 1; i < reports.size(); i++) {
-    if (reports[i].report_label != report_label) {
+    if (GetLabel(reports[i]) != report_label) {
       report_label = "";
       break;
     }
   }
 
-  for(const auto& Stat : *reports[0].statistics) {
+  for (const auto& Stat : stats) {
     // Get the data from the accumulator to BenchmarkReporter::Run's.
-    Run data;
-    data.benchmark_name = reports[0].benchmark_name + "_" + Stat.name_;
-    data.report_label = report_label;
-    data.iterations = run_iterations;
-
-    data.real_accumulated_time = Stat.compute_(real_accumulated_time_stat);
-    data.cpu_accumulated_time = Stat.compute_(cpu_accumulated_time_stat);
-    data.bytes_per_second = Stat.compute_(bytes_per_second_stat);
-    data.items_per_second = Stat.compute_(items_per_second_stat);
-
-    data.time_unit = reports[0].time_unit;
+    JSON data = {
+        {"name", reports[0].get_at<std::string>("name") + "_" + Stat.name_},
+        {"kind", "statistic"},
+        {"label", report_label},
+        {"iterations", run_iterations},
+        {"real_accumulated_time", Stat.compute_(real_accumulated_time_stat)},
+        {"cpu_accumulated_time", Stat.compute_(cpu_accumulated_time_stat)},
+        {"bytes_per_second", Stat.compute_(bytes_per_second_stat)},
+        {"items_per_second", Stat.compute_(items_per_second_stat)}};
+    data["real_iteration_time"] =
+        data.get_at<double>("real_accumulated_time") / run_iterations;
+    data["cpu_iteration_time"] =
+        data.get_at<double>("cpu_accumulated_time") / run_iterations;
 
     // user counters
+    std::map<std::string, Counter> CounterStats;
+
     for(auto const& kv : counter_stats) {
       const auto uc_stat = Stat.compute_(kv.second.s);
       auto c = Counter(uc_stat, counter_stats[kv.first].c.flags);
-      data.counters[kv.first] = c;
+      CounterStats.emplace(kv.first, c);
     }
+    data["counters"] = CounterStats;
 
     results.push_back(data);
   }

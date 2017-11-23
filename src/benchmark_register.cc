@@ -37,11 +37,12 @@
 #include "check.h"
 #include "commandlineflags.h"
 #include "complexity.h"
-#include "statistics.h"
 #include "log.h"
 #include "mutex.h"
 #include "re.h"
+#include "statistics.h"
 #include "string_util.h"
+#include "sysinfo.h"
 #include "timers.h"
 
 namespace benchmark {
@@ -67,7 +68,7 @@ class BenchmarkFamilies {
   static BenchmarkFamilies* GetInstance();
 
   // Registers a benchmark family and returns the index assigned to it.
-  size_t AddBenchmark(std::unique_ptr<Benchmark> family);
+  void AddBenchmark(std::unique_ptr<Benchmark> family);
 
   // Clear all registered benchmark families.
   void ClearBenchmarks();
@@ -77,6 +78,14 @@ class BenchmarkFamilies {
   bool FindBenchmarks(const std::string& re,
                       std::vector<Benchmark::Instance>* benchmarks,
                       std::ostream* Err);
+
+  static const BenchmarkInfoBase* GetInfo(const Benchmark* B) {
+    return static_cast<const BenchmarkInfoBase*>(B);
+  }
+
+  static const BenchmarkInfoBase* GetInfoForIndex(size_t Idx) {
+    return GetInfo(GetInstance()->families_[Idx].get());
+  }
 
  private:
   BenchmarkFamilies() {}
@@ -90,11 +99,10 @@ BenchmarkFamilies* BenchmarkFamilies::GetInstance() {
   return &instance;
 }
 
-size_t BenchmarkFamilies::AddBenchmark(std::unique_ptr<Benchmark> family) {
+void BenchmarkFamilies::AddBenchmark(std::unique_ptr<Benchmark> family) {
   MutexLock l(mutex_);
-  size_t index = families_.size();
+  family->index_ = families_.size();
   families_.push_back(std::move(family));
-  return index;
 }
 
 void BenchmarkFamilies::ClearBenchmarks() {
@@ -147,6 +155,7 @@ bool BenchmarkFamilies::FindBenchmarks(
         Benchmark::Instance instance;
         instance.name = family->name_;
         instance.benchmark = family.get();
+        instance.info = family.get();
         instance.report_mode = family->report_mode_;
         instance.arg = args;
         instance.time_unit = family->time_unit_;
@@ -158,7 +167,6 @@ bool BenchmarkFamilies::FindBenchmarks(
         instance.use_manual_time = family->use_manual_time_;
         instance.complexity = family->complexity_;
         instance.complexity_lambda = family->complexity_lambda_;
-        instance.statistics = &family->statistics_;
         instance.threads = num_threads;
 
         // Add arguments to instance name
@@ -225,7 +233,7 @@ bool FindBenchmarksInternal(const std::string& re,
 //                               Benchmark
 //=============================================================================//
 
-Benchmark::Benchmark(const char* name)
+BenchmarkInfoBase::BenchmarkInfoBase(const char* name)
     : name_(name),
       report_mode_(RM_Unspecified),
       time_unit_(kNanosecond),
@@ -236,7 +244,9 @@ Benchmark::Benchmark(const char* name)
       use_real_time_(false),
       use_manual_time_(false),
       complexity_(oNone),
-      complexity_lambda_(nullptr) {
+      complexity_lambda_(nullptr) {}
+
+Benchmark::Benchmark(const char* name) : BenchmarkInfoBase(name) {
   ComputeStatistics("mean", StatisticsMean);
   ComputeStatistics("median", StatisticsMedian);
   ComputeStatistics("stddev", StatisticsStdDev);

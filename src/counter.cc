@@ -15,6 +15,15 @@
 #include "counter.h"
 
 namespace benchmark {
+
+void to_json(JSON& j, const Counter& C) {
+  j = JSON{{"value", C.value}, {"flags", C.flags}};
+}
+void from_json(const JSON& j, Counter& C) {
+  C.value = j.at("value");
+  C.flags = static_cast<Counter::Flags>(j.get_at<Counter::Flags>("flags"));
+}
+
 namespace internal {
 
 double Finish(Counter const& c, double cpu_time, double num_threads) {

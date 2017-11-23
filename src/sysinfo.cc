@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "sysinfo.h"
 #include "internal_macros.h"
 
 #ifdef BENCHMARK_OS_WINDOWS
@@ -426,5 +427,23 @@ CPUInfo::CPUInfo()
       cycles_per_second(GetCPUCyclesPerSecond()),
       caches(GetCacheSizes()),
       scaling_enabled(CpuScalingEnabled(num_cpus)) {}
+
+void to_json(JSON& J, CPUInfo const& D) {
+  JSON Res{{"num_cpus", D.num_cpus},
+           {"cycles_per_second", D.cycles_per_second},
+           {"caches", D.caches},
+           {"scaling_enabled", D.scaling_enabled}};
+  J = Res;
+}
+void to_json(JSON& J, const CPUInfo::CacheInfo& CI) {
+  JSON Res{{"type", CI.type}, {"level", CI.level}, {"size", CI.size}};
+  J = Res;
+}
+
+void from_json(JSON const& J, CPUInfo::CacheInfo& CI) {
+  CI.type = J.at("type");
+  CI.level = J.at("level");
+  CI.size = J.at("size");
+}
 
 }  // end namespace benchmark

@@ -16,6 +16,7 @@ namespace internal {
 struct Benchmark::Instance {
   std::string name;
   Benchmark* benchmark;
+  const BenchmarkInfoBase* info;
   ReportMode report_mode;
   std::vector<int> arg;
   TimeUnit time_unit;
@@ -25,7 +26,6 @@ struct Benchmark::Instance {
   BigO complexity;
   BigOFunc* complexity_lambda;
   UserCounters counters;
-  const std::vector<Statistics>* statistics;
   bool last_benchmark_instance;
   int repetitions;
   double min_time;

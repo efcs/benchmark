@@ -10,12 +10,12 @@ namespace {
 
 class TestReporter : public benchmark::ConsoleReporter {
  public:
-  virtual void ReportRuns(const std::vector<Run>& report) {
-    all_runs_.insert(all_runs_.end(), begin(report), end(report));
-    ConsoleReporter::ReportRuns(report);
+  virtual void ReportResults(const benchmark::JSON& report) override {
+    all_runs_.push_back(report);
+    ConsoleReporter::ReportResults(report);
   }
 
-  std::vector<Run> all_runs_;
+  std::vector<benchmark::JSON> all_runs_;
 };
 
 struct TestCase {
@@ -26,16 +26,18 @@ struct TestCase {
   TestCase(const char* xname, const char* xlabel)
       : name(xname), label(xlabel) {}
 
-  typedef benchmark::BenchmarkReporter::Run Run;
-
-  void CheckRun(Run const& run) const {
-    CHECK(name == run.benchmark_name) << "expected " << name << " got "
-                                      << run.benchmark_name;
+  void CheckRun(benchmark::JSON const& json_root) const {
+    CHECK(json_root.at("stats").size() == 0);
+    CHECK(json_root.at("runs").size() == 1);
+    benchmark::JSON json = json_root.at("runs")[0];
+    std::string BName = json.at("name");
+    CHECK(name == BName) << "expected " << name << " got " << BName;
     if (label) {
-      CHECK(run.report_label == label) << "expected " << label << " got "
-                                       << run.report_label;
+      CHECK(json.count("label") == 1);
+      std::string L = json.at("label");
+      CHECK(L == label) << "expected " << label << " got " << L;
     } else {
-      CHECK(run.report_label == "");
+      CHECK(json.count("label") == 0);
     }
   }
 };
@@ -134,10 +136,9 @@ void RunTestOne() {
   TestReporter test_reporter;
   benchmark::RunSpecifiedBenchmarks(&test_reporter);
 
-  typedef benchmark::BenchmarkReporter::Run Run;
   auto EB = ExpectedResults.begin();
 
-  for (Run const& run : test_reporter.all_runs_) {
+  for (benchmark::JSON const& run : test_reporter.all_runs_) {
     assert(EB != ExpectedResults.end());
     EB->CheckRun(run);
     ++EB;
@@ -163,10 +164,9 @@ void RunTestTwo() {
   num_ran = benchmark::RunSpecifiedBenchmarks(&test_reporter);
   assert(num_ran == ExpectedResults.size());
 
-  typedef benchmark::BenchmarkReporter::Run Run;
   auto EB = ExpectedResults.begin();
 
-  for (Run const& run : test_reporter.all_runs_) {
+  for (benchmark::JSON const& run : test_reporter.all_runs_) {
     assert(EB != ExpectedResults.end());
     EB->CheckRun(run);
     ++EB;

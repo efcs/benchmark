@@ -181,9 +181,10 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #include <set>
 
 #if defined(BENCHMARK_HAS_CXX11)
-#include <type_traits>
 #include <initializer_list>
+#include <type_traits>
 #include <utility>
+#include "json.h"
 #endif
 
 #if defined(_MSC_VER)
@@ -241,6 +242,11 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 
 namespace benchmark {
 class BenchmarkReporter;
+
+#ifdef BENCHMARK_HAS_CXX11
+namespace json_ns = nlohmann;
+using JSON = json_ns::json;
+#endif
 
 void Initialize(int* argc, char** argv);
 
@@ -366,6 +372,10 @@ public:
 // This is the container for the user-defined counters.
 typedef std::map<std::string, Counter> UserCounters;
 
+#ifdef BENCHMARK_HAS_CXX11
+void to_json(JSON& j, const Counter& C);
+void from_json(const JSON& j, Counter& C);
+#endif
 
 // TimeUnit is passed to a benchmark in order to specify the order of magnitude
 // for the measured time.
@@ -654,13 +664,39 @@ namespace internal {
 
 typedef void(Function)(State&);
 
+class BenchmarkInfoBase {
+ public:
+  std::string name_;
+  size_t index_;
+  ReportMode report_mode_;
+  std::vector<std::string> arg_names_;   // Args for all benchmark runs
+  std::vector<std::vector<int> > args_;  // Args for all benchmark runs
+  TimeUnit time_unit_;
+  int range_multiplier_;
+  double min_time_;
+  size_t iterations_;
+  int repetitions_;
+  bool use_real_time_;
+  bool use_manual_time_;
+  BigO complexity_;
+  BigOFunc* complexity_lambda_;
+  std::vector<Statistics> statistics_;
+  std::vector<int> thread_counts_;
+
+ protected:
+  BenchmarkInfoBase(const char* Name);
+
+ private:
+  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(BenchmarkInfoBase);
+};
+
 // ------------------------------------------------------
 // Benchmark registration object.  The BENCHMARK() macro expands
 // into an internal::Benchmark* object.  Various methods can
 // be called on this object to change the properties of the benchmark.
 // Each method returns "this" so that multiple method calls can
 // chained into one expression.
-class Benchmark {
+class Benchmark : protected BenchmarkInfoBase {
  public:
   virtual ~Benchmark();
 
@@ -827,22 +863,6 @@ class Benchmark {
 
  private:
   friend class BenchmarkFamilies;
-
-  std::string name_;
-  ReportMode report_mode_;
-  std::vector<std::string> arg_names_;   // Args for all benchmark runs
-  std::vector<std::vector<int> > args_;  // Args for all benchmark runs
-  TimeUnit time_unit_;
-  int range_multiplier_;
-  double min_time_;
-  size_t iterations_;
-  int repetitions_;
-  bool use_real_time_;
-  bool use_manual_time_;
-  BigO complexity_;
-  BigOFunc* complexity_lambda_;
-  std::vector<Statistics> statistics_;
-  std::vector<int> thread_counts_;
 
   Benchmark& operator=(Benchmark const&);
 };
@@ -1154,24 +1174,7 @@ class Fixture : public internal::Benchmark {
 
 namespace benchmark {
 
-struct CPUInfo {
-  struct CacheInfo {
-    std::string type;
-    int level;
-    int size;
-  };
-
-  int num_cpus;
-  double cycles_per_second;
-  std::vector<CacheInfo> caches;
-  bool scaling_enabled;
-
-  static const CPUInfo& Get();
-
- private:
-  CPUInfo();
-  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(CPUInfo);
-};
+#ifdef BENCHMARK_HAS_CXX11
 
 // Interface for custom benchmark result printers.
 // By default, benchmark reports are printed to stdout. However an application
@@ -1180,75 +1183,6 @@ struct CPUInfo {
 // The reporter object must implement the following interface.
 class BenchmarkReporter {
  public:
-  struct Context {
-    CPUInfo const& cpu_info;
-    // The number of chars in the longest benchmark name.
-    size_t name_field_width;
-
-    Context();
-  };
-
-  struct Run {
-    Run()
-        : error_occurred(false),
-          iterations(1),
-          time_unit(kNanosecond),
-          real_accumulated_time(0),
-          cpu_accumulated_time(0),
-          bytes_per_second(0),
-          items_per_second(0),
-          max_heapbytes_used(0),
-          complexity(oNone),
-          complexity_lambda(),
-          complexity_n(0),
-          report_big_o(false),
-          report_rms(false),
-          counters() {}
-
-    std::string benchmark_name;
-    std::string report_label;  // Empty if not set by benchmark.
-    bool error_occurred;
-    std::string error_message;
-
-    int64_t iterations;
-    TimeUnit time_unit;
-    double real_accumulated_time;
-    double cpu_accumulated_time;
-
-    // Return a value representing the real time per iteration in the unit
-    // specified by 'time_unit'.
-    // NOTE: If 'iterations' is zero the returned value represents the
-    // accumulated time.
-    double GetAdjustedRealTime() const;
-
-    // Return a value representing the cpu time per iteration in the unit
-    // specified by 'time_unit'.
-    // NOTE: If 'iterations' is zero the returned value represents the
-    // accumulated time.
-    double GetAdjustedCPUTime() const;
-
-    // Zero if not set by benchmark.
-    double bytes_per_second;
-    double items_per_second;
-
-    // This is set to 0.0 if memory tracing is not enabled.
-    double max_heapbytes_used;
-
-    // Keep track of arguments to compute asymptotic complexity
-    BigO complexity;
-    BigOFunc* complexity_lambda;
-    int complexity_n;
-
-    // what statistics to compute from the measurements
-    const std::vector<Statistics>* statistics;
-
-    // Inform print function whether the current run is a complexity report
-    bool report_big_o;
-    bool report_rms;
-
-    UserCounters counters;
-  };
-
   // Construct a BenchmarkReporter with the output stream set to 'std::cout'
   // and the error stream set to 'std::cerr'
   BenchmarkReporter();
@@ -1259,7 +1193,7 @@ class BenchmarkReporter {
   // platform under which the benchmarks are running. The benchmark run is
   // never started if this function returns false, allowing the reporter
   // to skip runs based on the context information.
-  virtual bool ReportContext(const Context& context) = 0;
+  virtual bool ReportContext(const JSON& context) = 0;
 
   // Called once for each group of benchmark runs, gives information about
   // cpu-time and heap memory usage during the benchmark run. If the group
@@ -1268,7 +1202,7 @@ class BenchmarkReporter {
   // Additionally if this group of runs was the last in a family of benchmarks
   // 'reports' contains additional entries representing the asymptotic
   // complexity and RMS of that benchmark family.
-  virtual void ReportRuns(const std::vector<Run>& report) = 0;
+  virtual void ReportResults(const JSON& result) = 0;
 
   // Called once and only once after ever group of benchmarks is run and
   // reported.
@@ -1297,7 +1231,7 @@ class BenchmarkReporter {
   // Write a human readable string to 'out' representing the specified
   // 'context'.
   // REQUIRES: 'out' is non-null.
-  static void PrintBasicContext(std::ostream* out, Context const& context);
+  static void PrintBasicContext(std::ostream* out, JSON const& context);
 
  private:
   std::ostream* output_stream_;
@@ -1319,12 +1253,12 @@ public:
       : output_options_(opts_), name_field_width_(0),
         prev_counters_(), printed_header_(false) {}
 
-  virtual bool ReportContext(const Context& context);
-  virtual void ReportRuns(const std::vector<Run>& reports);
+  virtual bool ReportContext(const JSON& context);
+  virtual void ReportResults(const JSON& result);
 
  protected:
-  virtual void PrintRunData(const Run& report);
-  virtual void PrintHeader(const Run& report);
+  virtual void PrintRunData(JSON const& report);
+  virtual void PrintHeader(const JSON& report);
 
   OutputOptions output_options_;
   size_t name_field_width_;
@@ -1335,12 +1269,11 @@ public:
 class JSONReporter : public BenchmarkReporter {
  public:
   JSONReporter() : first_report_(true) {}
-  virtual bool ReportContext(const Context& context);
-  virtual void ReportRuns(const std::vector<Run>& reports);
+  virtual bool ReportContext(const JSON& context);
+  virtual void ReportResults(const JSON& result);
   virtual void Finalize();
 
  private:
-  void PrintRunData(const Run& report);
 
   bool first_report_;
 };
@@ -1348,15 +1281,17 @@ class JSONReporter : public BenchmarkReporter {
 class CSVReporter : public BenchmarkReporter {
  public:
   CSVReporter() : printed_header_(false) {}
-  virtual bool ReportContext(const Context& context);
-  virtual void ReportRuns(const std::vector<Run>& reports);
+  virtual bool ReportContext(const JSON& context);
+  virtual void ReportResults(const JSON& result);
 
  private:
-  void PrintRunData(const Run& report);
+  void PrintRunData(JSON const& run);
 
   bool printed_header_;
   std::set< std::string > user_counter_names_;
 };
+
+#endif  // BENCHMARK_HAS_CXX11
 
 inline const char* GetTimeUnitString(TimeUnit unit) {
   switch (unit) {
