@@ -254,6 +254,29 @@ class BenchmarkInstance;
 
 void Initialize(int* argc, char** argv);
 
+// Set the output stream used by the library to report console output, and
+// return the previously set value. If the specified argument is null, the
+// output stream is set to `std::cout`.
+// NOTE: The specified ostream `Out` must be valid for the lifetime of the
+// program or until `SetOutputStream` is set to replace it.
+std::ostream* SetOutputStream(std::ostream* Out);
+std::ostream& GetOutputStream();
+
+// Set the output stream used by the library to report errors, and return
+// the previously set value.
+// If the specified argument is null, the output stream is set do `std::cerr`.
+// NOTE: The specified ostream `Err` must be valid for the lifetime of the
+// program or until `SetOutputStream` is set to replace it.
+std::ostream* SetErrorStream(std::ostream* Err);
+std::ostream& GetErrorStream();
+
+enum CallbackKind { CK_Context, CK_Report, CK_Final };
+
+using CallbackType = std::function<void(CallbackKind, JSON&)>;
+int RegisterCallback(CallbackType CB);
+bool RemoveCallback(int ID);
+void ClearCallbacks();
+
 // Report to stdout all arguments in 'argv' as unrecognized except the first.
 // Returns true there is at least on unrecognized argument (i.e. 'argc' > 1).
 bool ReportUnrecognizedArguments(int argc, char** argv);
@@ -271,7 +294,7 @@ bool ReportUnrecognizedArguments(int argc, char** argv);
 //
 // RETURNS: The number of matching benchmarks.
 size_t RunSpecifiedBenchmarks();
-size_t RunSpecifiedBenchmarks(std::ostream* out, std::ostream* err);
+
 typedef std::vector<internal::BenchmarkInstance> BenchmarkInstanceList;
 
 #ifdef BENCHMARK_HAS_CXX11

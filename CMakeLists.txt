@@ -80,6 +80,8 @@ else()
     add_cxx_compiler_flag(-std=c++0x)
   endif()
 
+    add_cxx_compiler_flag(-fcolor-diagnostics)
+
   # Turn compiler warnings up to 11
   add_cxx_compiler_flag(-Wall)
 

@@ -32,6 +32,7 @@
 #include <iostream>
 #include <memory>
 #include <thread>
+#include <unordered_map>
 
 #include "check.h"
 #include "colorprint.h"
@@ -76,10 +77,6 @@ DEFINE_bool(benchmark_report_aggregates_only, false,
             "specified only the mean, standard deviation, and other statistics "
             "are reported for repeated benchmarks.");
 
-DEFINE_string(benchmark_format, "console",
-              "The format to use for console output. Valid values are "
-              "'console', or 'json'.");
-
 DEFINE_string(benchmark_out, "", "The file to write additonal output to");
 
 DEFINE_string(benchmark_color, "auto",
@@ -97,6 +94,40 @@ DEFINE_bool(benchmark_counters_tabular, false,
 DEFINE_int32(v, 0, "The level of verbose logging to output");
 
 namespace benchmark {
+
+namespace {
+
+std::ostream*& GetOutputStreamImp() {
+  static std::ostream* Out = &std::cout;
+  return Out;
+}
+
+std::ostream*& GetErrorStreamImp() {
+  static std::ostream* Err = &std::cerr;
+  return Err;
+}
+
+}  // end namespace
+
+std::ostream* SetOutputStream(std::ostream* In) {
+  if (In == nullptr) In = &std::cout;
+  std::ostream*& Out = GetOutputStreamImp();
+  std::ostream* Last = Out;
+  Out = In;
+  return Last;
+}
+
+std::ostream& GetOutputStream() { return *GetOutputStreamImp(); }
+
+std::ostream* SetErrorStream(std::ostream* In) {
+  if (In == nullptr) In = &std::cerr;
+  std::ostream*& Out = GetErrorStreamImp();
+  std::ostream* Last = Out;
+  Out = In;
+  return Last;
+}
+
+std::ostream& GetErrorStream() { return *GetErrorStreamImp(); }
 
 namespace {
 static const size_t kMaxIterations = 1000000000;
@@ -495,14 +526,46 @@ void State::FinishKeepRunning() {
   manager_->StartStopBarrier();
 }
 
+namespace {
+using CallbackEntry = std::pair<int, CallbackType>;
+using CallbackList = std::vector<CallbackEntry>;
+
+int GetNextCallbackID() {
+  static int ID = 0;
+  return ID++;
+}
+
+CallbackList* GetCallbackList() {
+  static CallbackList callbacks;
+  return &callbacks;
+}
+
+void InvokeCallbacks(CallbackKind K, JSON& J) {
+  for (auto& CB : *GetCallbackList()) CB.second(K, J);
+}
+
+}  // end namespace
+
+int RegisterCallback(CallbackType CB) {
+  int ID = GetNextCallbackID();
+  GetCallbackList()->emplace_back(ID, CB);
+  return ID;
+}
+
+void EraseCallback(int ID) {
+  auto& CBList = *GetCallbackList();
+  CBList.erase(std::remove_if(
+      CBList.begin(), CBList.end(),
+      [=](CallbackEntry const& Ent) { return Ent.first == ID; }));
+}
+
+void ClearCallbacks() { GetCallbackList()->clear(); }
+
 namespace internal {
 namespace {
 
-JSON RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
-                   BenchmarkReporter* console_reporter) {
-  // Note the file_reporter can be null.
-  CHECK(console_reporter != nullptr);
-
+std::pair<int, int> GetNameAndStatFieldWidths(
+    const std::vector<BenchmarkInstance>& benchmarks) {
   // Determine the width of the name field using a minimum width of 10.
   bool has_repetitions = FLAGS_benchmark_repetitions > 1;
   size_t name_field_width = 10;
@@ -516,17 +579,26 @@ JSON RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
       stat_field_width = std::max<size_t>(stat_field_width, Stat.name_.size());
   }
   if (has_repetitions) name_field_width += 1 + stat_field_width;
+  return {name_field_width, stat_field_width};
+}
 
+JSON GetContext(const BenchmarkInstanceList& benchmarks) {
 #if defined(NDEBUG)
   const char build_type[] = "release";
 #else
   const char build_type[] = "debug";
 #endif
   // Print header here
-  JSON context{{"name_field_width", name_field_width},
-               {"date", LocalDateTimeString()},
-               {"library_build_type", build_type},
-               {"cpu_info", CPUInfo::Get()}};
+  JSON context{
+      {"name_field_width", GetNameAndStatFieldWidths(benchmarks).first},
+      {"date", LocalDateTimeString()},
+      {"library_build_type", build_type},
+      {"cpu_info", CPUInfo::Get()}};
+  return context;
+}
+
+JSON RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks) {
+  JSON context = GetContext(benchmarks);
   JSON benchmark_res = JSON::array();
 
   // Keep track of runing times of all instances of current benchmark
@@ -534,39 +606,26 @@ JSON RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
 
   // We flush streams after invoking reporter methods that write to them. This
   // ensures users get timely updates even when streams are not line-buffered.
-  auto flushStreams = [](BenchmarkReporter* reporter) {
-    if (!reporter) return;
-    std::flush(reporter->GetOutputStream());
-    std::flush(reporter->GetErrorStream());
+  auto flushStreams = []() {
+    std::flush(GetOutputStream());
+    std::flush(GetErrorStream());
   };
 
-  if (console_reporter->ReportContext(context)) {
-    flushStreams(console_reporter);
+  InvokeCallbacks(CK_Context, context);
+  flushStreams();
 
-    for (const auto& benchmark : benchmarks) {
-      JSON report = RunBenchmark(benchmark, &complexity_reports);
-      benchmark_res.push_back(report);
-      console_reporter->ReportResults(report);
-      flushStreams(console_reporter);
-    }
+  for (const auto& benchmark : benchmarks) {
+    JSON report = RunBenchmark(benchmark, &complexity_reports);
+    InvokeCallbacks(CK_Report, report);
+    benchmark_res.push_back(report);
+    flushStreams();
   }
-  console_reporter->Finalize();
-  flushStreams(console_reporter);
+
   JSON res{{"context", context}, {"benchmarks", benchmark_res}};
-  return res;
-}
+  InvokeCallbacks(CK_Final, res);
+  flushStreams();
 
-std::unique_ptr<BenchmarkReporter> CreateReporter(
-    std::string const& name, ConsoleReporter::OutputOptions output_opts) {
-  typedef std::unique_ptr<BenchmarkReporter> PtrType;
-  if (name == "console") {
-    return PtrType(new ConsoleReporter(output_opts));
-  } else if (name == "json") {
-    return PtrType(new JSONReporter);
-  } else {
-    std::cerr << "Unexpected format: '" << name << "'\n";
-    std::exit(1);
-  }
+  return res;
 }
 
 }  // end namespace
@@ -593,44 +652,33 @@ ConsoleReporter::OutputOptions GetOutputOptions(bool force_no_color) {
 }  // end namespace internal
 
 size_t RunSpecifiedBenchmarks() {
-  return RunSpecifiedBenchmarks(&std::cout, &std::cerr);
-}
-
-size_t RunSpecifiedBenchmarks(std::ostream* out, std::ostream* err) {
   std::string spec = FLAGS_benchmark_filter;
   if (spec.empty() || spec == "all")
     spec = ".";  // Regexp that matches all benchmarks
 
-  // Setup the reporters
-  std::unique_ptr<BenchmarkReporter> console_reporter =
-      internal::CreateReporter(FLAGS_benchmark_format,
-                               internal::GetOutputOptions());
-
-  console_reporter->SetOutputStream(out);
-  console_reporter->SetErrorStream(err);
-
-  auto& Out = console_reporter->GetOutputStream();
-  auto& Err = console_reporter->GetErrorStream();
-
   std::vector<internal::BenchmarkInstance> benchmarks;
-  if (!FindBenchmarksInternal(spec, &benchmarks, &Err)) return 0;
-
+  if (!FindBenchmarksInternal(spec, &benchmarks, &GetErrorStream())) return 0;
   if (benchmarks.empty()) {
-    Err << "Failed to match any benchmarks against regex: " << spec << "\n";
+    GetErrorStream() << "Failed to match any benchmarks against regex: " << spec
+                     << "\n";
     return 0;
   }
+
+  ConsoleReporter CR(internal::GetOutputOptions());
+
+  auto& Out = GetOutputStream();
 
   if (FLAGS_benchmark_list_tests) {
     for (auto const& benchmark : benchmarks) Out << benchmark.name << "\n";
   } else {
-    JSON Res = internal::RunBenchmarks(benchmarks, console_reporter.get());
+    JSON Res = internal::RunBenchmarks(benchmarks);
     std::string const& fname = FLAGS_benchmark_out;
 
     if (!fname.empty()) {
       std::ofstream output_file;
       output_file.open(fname);
       if (!output_file.is_open()) {
-        Err << "invalid file name: '" << fname << std::endl;
+        GetErrorStream() << "invalid file name: '" << fname << std::endl;
         std::exit(1);
       }
       output_file << Res << std::endl;
@@ -649,9 +697,7 @@ void PrintUsageAndExit() {
           "          [--benchmark_min_time=<min_time>]\n"
           "          [--benchmark_repetitions=<num_repetitions>]\n"
           "          [--benchmark_report_aggregates_only={true|false}\n"
-          "          [--benchmark_format=<console|json>]\n"
           "          [--benchmark_out=<filename>]\n"
-          "          [--benchmark_out_format=<json|console>]\n"
           "          [--benchmark_color={auto|true|false}]\n"
           "          [--benchmark_counters_tabular={true|false}]\n"
           "          [--v=<verbosity>]\n");
@@ -670,7 +716,6 @@ void ParseCommandLineFlags(int* argc, char** argv) {
                        &FLAGS_benchmark_repetitions) ||
         ParseBoolFlag(argv[i], "benchmark_report_aggregates_only",
                       &FLAGS_benchmark_report_aggregates_only) ||
-        ParseStringFlag(argv[i], "benchmark_format", &FLAGS_benchmark_format) ||
         ParseStringFlag(argv[i], "benchmark_out", &FLAGS_benchmark_out) ||
         ParseStringFlag(argv[i], "benchmark_color", &FLAGS_benchmark_color) ||
         // "color_print" is the deprecated name for "benchmark_color".
@@ -686,9 +731,6 @@ void ParseCommandLineFlags(int* argc, char** argv) {
     } else if (IsFlag(argv[i], "help")) {
       PrintUsageAndExit();
     }
-  }
-  if (FLAGS_benchmark_format != "console" && FLAGS_benchmark_format != "json") {
-    PrintUsageAndExit();
   }
   if (FLAGS_benchmark_color.empty()) {
     PrintUsageAndExit();
@@ -711,12 +753,9 @@ BenchmarkInstanceList FindBenchmarks() {
   return FindBenchmarks(FLAGS_benchmark_filter);
 }
 JSON RunBenchmarks(BenchmarkInstanceList const& Benches) {
-  // Setup the reporters
-  std::unique_ptr<BenchmarkReporter> console_reporter =
-      internal::CreateReporter(FLAGS_benchmark_format,
-                               internal::GetOutputOptions());
-  return internal::RunBenchmarks(Benches, console_reporter.get());
+  return internal::RunBenchmarks(Benches);
 }
+
 bool ReportUnrecognizedArguments(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     fprintf(stderr, "%s: error: unrecognized command-line flag: %s\n", argv[0], argv[i]);
