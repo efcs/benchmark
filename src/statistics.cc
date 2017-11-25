@@ -179,16 +179,14 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
         {"time_unit", reports[0].get_at<std::string>("time_unit")},
         {"real_accumulated_time", Stat.compute_(real_accumulated_time_stat)},
         {"cpu_accumulated_time", Stat.compute_(cpu_accumulated_time_stat)}};
-    if (has_bytes_per_second)
-      data["bytes_per_second"] = Stat.compute_(bytes_per_second_stat);
-    if (has_items_per_second)
-      data["items_per_second"] = Stat.compute_(items_per_second_stat);
-
     data["real_iteration_time"] =
         data.get_at<double>("real_accumulated_time") / run_iterations;
     data["cpu_iteration_time"] =
         data.get_at<double>("cpu_accumulated_time") / run_iterations;
-
+    if (has_bytes_per_second)
+      data["bytes_per_second"] = Stat.compute_(bytes_per_second_stat);
+    if (has_items_per_second)
+      data["items_per_second"] = Stat.compute_(items_per_second_stat);
     // user counters
     std::map<std::string, Counter> CounterStats;
 
