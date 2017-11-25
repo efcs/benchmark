@@ -47,6 +47,7 @@
 #include "string_util.h"
 #include "sysinfo.h"
 #include "timers.h"
+#include "utility.h"
 
 namespace benchmark {
 
@@ -55,20 +56,6 @@ static const size_t kMaxIterations = 1000000000;
 }  // end namespace
 
 namespace internal {
-
-static bool IsZero(double n) {
-  return std::abs(n) < std::numeric_limits<double>::epsilon();
-}
-
-void UseCharPointer(char const volatile*) {}
-
-#ifdef BENCHMARK_HAS_NO_BUILTIN_UNREACHABLE
-BENCHMARK_NORETURN void UnreachableImp(const char* FName, int Line) {
-  std::cerr << FName << ":" << Line << " executing unreachable code!"
-            << std::endl;
-  std::abort();
-}
-#endif
 
 class ThreadManager {
  public:
@@ -411,13 +398,6 @@ JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
 
 }  // namespace
 
-JSON RunBenchmark(BenchmarkInstance const& I, bool Report) {
-  JSON Res = RunSingleBenchmarkImp(I, nullptr);
-  InvokeCallbacks(CK_Report, Res);
-  if (Report) GetGlobalConsoleReporter()(CK_Report, Res);
-  return Res;
-}
-
 }  // namespace internal
 
 State::State(size_t max_iters, const std::vector<int>& ranges, int thread_i,
@@ -560,6 +540,25 @@ JSON RunBenchmarks(const std::vector<internal::BenchmarkInstance>& benchmarks,
 
   invokeAllCallbacks(CK_Final, benchmark_res);
   return benchmark_res;
+}
+
+JSON RunBenchmark(internal::BenchmarkInstance const& I, bool ReportConsole) {
+  internal::DisplayContextOnce();
+  auto invokeAllCallbacks = [&](CallbackKind K, JSON& J) {
+    internal::InvokeCallbacks(K, J);
+    if (ReportConsole) GetGlobalConsoleReporter()(K, J);
+  };
+
+  std::vector<internal::BenchmarkInstance> V;
+  V.push_back(I);
+  JSON initial_info = internal::GetNameAndStatFieldWidths(V);
+  invokeAllCallbacks(CK_Initial, initial_info);
+
+  JSON Res = internal::RunSingleBenchmarkImp(I, nullptr);
+  invokeAllCallbacks(CK_Report, Res);
+
+  invokeAllCallbacks(CK_Final, Res);
+  return Res;
 }
 
 size_t RunSpecifiedBenchmarks() {

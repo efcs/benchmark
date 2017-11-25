@@ -964,35 +964,18 @@ void ClearRegisteredBenchmarks();
 size_t RunSpecifiedBenchmarks();
 
 #ifdef BENCHMARK_HAS_CXX11
-enum CallbackKind { CK_Initial, CK_Context, CK_Report, CK_Final };
-
 typedef std::vector<internal::BenchmarkInstance> BenchmarkInstanceList;
-
-using CallbackType = std::function<void(CallbackKind, JSON&)>;
-using CallbackList = std::vector<CallbackType>;
-int RegisterCallback(CallbackType CB);
-bool RemoveCallback(int ID);
-void ClearCallbacks();
-
-JSON GetContext();
 
 BenchmarkInstanceList FindSpecifiedBenchmarks();
 BenchmarkInstanceList FindBenchmarks(std::string const& Regex,
                                      ErrorCode* EC = nullptr);
 
-namespace internal {
-
-JSON RunBenchmark(internal::BenchmarkInstance const& I, bool ReportConsole);
-}  // end namespace internal
-
+JSON RunBenchmark(internal::BenchmarkInstance const& I,
+                  bool ReportConsole = false);
 JSON RunBenchmarks(BenchmarkInstanceList const&, bool ReportConsole = false);
 
 inline JSON RunBenchmark(internal::Benchmark* BM) {
   return RunBenchmarks(BM->GenerateInstances(), false);
-}
-
-inline JSON RunBenchmark(const internal::BenchmarkInstance& BI) {
-  return internal::RunBenchmark(BI, false);
 }
 
 inline JSON RunBenchmarks(std::vector<internal::Benchmark*> L) {
@@ -1004,8 +987,17 @@ inline JSON RunBenchmarks(std::vector<internal::Benchmark*> L) {
   return RunBenchmarks(IL, false);
 }
 
+JSON GetContext();
 void ReportResults(JSON const& Res);
-#endif
+
+enum CallbackKind { CK_Initial, CK_Context, CK_Report, CK_Final };
+
+using CallbackType = std::function<void(CallbackKind, JSON&)>;
+using CallbackList = std::vector<CallbackType>;
+int RegisterCallback(CallbackType CB);
+bool RemoveCallback(int ID);
+void ClearCallbacks();
+#endif  // BENCHMARK_HAS_CXX11
 
 namespace internal {
 // The class used to hold all Benchmarks created from static function.
