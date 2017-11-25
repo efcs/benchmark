@@ -95,6 +95,12 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
   cpu_accumulated_time_stat.reserve(reports.size());
   bytes_per_second_stat.reserve(reports.size());
   items_per_second_stat.reserve(reports.size());
+  auto check_stat = [&](std::string Key) {
+    return std::all_of(reports.begin(), reports.end(),
+                       [&](JSON const& J) { return J.count(Key) == 1; });
+  };
+  bool has_bytes_per_second = check_stat("bytes_per_second");
+  bool has_items_per_second = check_stat("items_per_second");
 
   // All repetitions should be run wNith the same number of iterations so we
   // can take this information from the first benchmark.
@@ -132,9 +138,13 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
     cpu_accumulated_time_stat.emplace_back(
         run.get_at<double>("cpu_accumulated_time"));
 
-    // FIXME: EricWF
-    // items_per_second_stat.emplace_back(run.get_at<double>("items_per_second"));
-    // bytes_per_second_stat.emplace_back(run.get_at<double>("bytes_per_second"));
+    if (has_items_per_second)
+      items_per_second_stat.emplace_back(
+          run.get_at<double>("items_per_second"));
+    if (has_bytes_per_second)
+      bytes_per_second_stat.emplace_back(
+          run.get_at<double>("bytes_per_second"));
+
     // user counters
     UserCounters UC = run["counters"];
     for (auto const& cnt : UC) {
@@ -168,10 +178,12 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
         {"iterations", run_iterations},
         {"time_unit", reports[0].get_at<std::string>("time_unit")},
         {"real_accumulated_time", Stat.compute_(real_accumulated_time_stat)},
-        {"cpu_accumulated_time", Stat.compute_(cpu_accumulated_time_stat)},
-        //{"bytes_per_second", Stat.compute_(bytes_per_second_stat)},
-        //{"items_per_second", Stat.compute_(items_per_second_stat)}
-    };
+        {"cpu_accumulated_time", Stat.compute_(cpu_accumulated_time_stat)}};
+    if (has_bytes_per_second)
+      data["bytes_per_second"] = Stat.compute_(bytes_per_second_stat);
+    if (has_items_per_second)
+      data["items_per_second"] = Stat.compute_(items_per_second_stat);
+
     data["real_iteration_time"] =
         data.get_at<double>("real_accumulated_time") / run_iterations;
     data["cpu_iteration_time"] =
