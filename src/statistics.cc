@@ -96,7 +96,7 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
   bytes_per_second_stat.reserve(reports.size());
   items_per_second_stat.reserve(reports.size());
 
-  // All repetitions should be run with the same number of iterations so we
+  // All repetitions should be run wNith the same number of iterations so we
   // can take this information from the first benchmark.
   int64_t const run_iterations = reports.front().at("iterations");
   // create stats for user counters
@@ -166,10 +166,12 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
         {"kind", "statistic"},
         {"label", report_label},
         {"iterations", run_iterations},
+        {"time_unit", reports[0].get_at<std::string>("time_unit")},
         {"real_accumulated_time", Stat.compute_(real_accumulated_time_stat)},
         {"cpu_accumulated_time", Stat.compute_(cpu_accumulated_time_stat)},
-        {"bytes_per_second", Stat.compute_(bytes_per_second_stat)},
-        {"items_per_second", Stat.compute_(items_per_second_stat)}};
+        //{"bytes_per_second", Stat.compute_(bytes_per_second_stat)},
+        //{"items_per_second", Stat.compute_(items_per_second_stat)}
+    };
     data["real_iteration_time"] =
         data.get_at<double>("real_accumulated_time") / run_iterations;
     data["cpu_iteration_time"] =

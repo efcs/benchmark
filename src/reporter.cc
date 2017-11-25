@@ -158,22 +158,6 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
     return;
   }
 
-  // Format bytes per second
-  if (result.count("bytes_per_second") != 0) {
-    std::string rate = StrCat(
-        " ", HumanReadableNumber(result.get_at<double>("bytes_per_second")),
-        "B/s");
-    printer(Out, COLOR_DEFAULT, " %*s", 13, rate.c_str());
-  }
-
-  // Format items per second
-  if (result.count("items_per_second") != 0) {
-    std::string items = StrCat(
-        " ", HumanReadableNumber(result.get_at<double>("items_per_second")),
-        " items/s");
-    printer(Out, COLOR_DEFAULT, " %*s", 18, items.c_str());
-  }
-
   const double real_time = result.at("real_iteration_time");
   const double cpu_time = result.at("cpu_iteration_time");
   const std::string timeLabel = result.at("time_unit");
@@ -184,10 +168,6 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
 
   if (result.count("iterations") != 0) {
     printer(Out, COLOR_CYAN, "%10lld", result.get_at<int64_t>("iterations"));
-  }
-  if (result.count("label") != 0) {
-    printer(Out, COLOR_DEFAULT, " %s",
-            result.get_at<std::string>("label").c_str());
   }
 
   if (result.at("counters") != 0) {
@@ -207,23 +187,50 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
       }
     }
   }
+
+  // Format bytes per second
+  if (result.count("bytes_per_second") != 0) {
+    std::string rate = StrCat(
+        " ", HumanReadableNumber(result.get_at<double>("bytes_per_second")),
+        "B/s");
+    printer(Out, COLOR_DEFAULT, " %*s", 13, rate.c_str());
+  }
+
+  // Format items per second
+  if (result.count("items_per_second") != 0) {
+    std::string items = StrCat(
+        " ", HumanReadableNumber(result.get_at<double>("items_per_second")),
+        " items/s");
+    printer(Out, COLOR_DEFAULT, " %*s", 18, items.c_str());
+  }
+
+  if (result.count("label") != 0) {
+    printer(Out, COLOR_DEFAULT, " %s",
+            result.get_at<std::string>("label").c_str());
+  }
 }
 
 static void PrintComplexityRun(std::ostream& Out, PrinterFn* printer,
-                               const JSON& result) {
+                               const JSON& result, size_t name_field_width) {
   std::string Name = result.at("name");
-  std::string Kind = result.at("kind");
+
+  std::string BigOName = Name + "_BigO";
+  printer(Out, COLOR_BLUE, "%-*s ", name_field_width, BigOName.c_str());
 
   JSON BigO = result.at("big_o");
-  JSON RMS = result.at("rms");
-
   std::string big_o = result["complexity_string"];
   printer(Out, COLOR_YELLOW, "%10.2f %s %10.2f %s ",
           BigO.get_at<double>("real_time_coefficient"), big_o.c_str(),
           BigO.get_at<double>("cpu_time_coefficient"), big_o.c_str());
+
+  printer(Out, COLOR_DEFAULT, "\n");
+  std::string RMSName = Name + "_RMS";
+  printer(Out, COLOR_BLUE, "%-*s ", name_field_width, RMSName.c_str());
+
+  JSON RMS = result.at("rms");
   printer(Out, COLOR_YELLOW, "%10.0f %% %10.0f %% ",
-          RMS.get_at<double>("real_time") * 100,
-          RMS.get_at<double>("cpu_time") * 100);
+          RMS.get_at<double>("real_time") * 100.0,
+          RMS.get_at<double>("cpu_time") * 100.0);
 }
 
 void ConsoleReporter::PrintRunData(const JSON& result) {
@@ -235,12 +242,13 @@ void ConsoleReporter::PrintRunData(const JSON& result) {
   std::string Kind = result.at("kind");
 
   auto name_color = (Kind == "complexity") ? COLOR_BLUE : COLOR_GREEN;
-  printer(Out, name_color, "%-*s ", name_field_width_, Name.c_str());
   if (Kind == "normal" || Kind == "error") {
+    printer(Out, name_color, "%-*s ", name_field_width_, Name.c_str());
     PrintNormalRun(Out, printer, output_options_, result);
   } else if (Kind == "complexity") {
-    PrintComplexityRun(Out, printer, result);
+    PrintComplexityRun(Out, printer, result, name_field_width_);
   } else if (Kind == "statistic") {
+    printer(Out, name_color, "%-*s ", name_field_width_, Name.c_str());
     PrintNormalRun(Out, printer, output_options_, result);
   } else {
     // FIXME: Do something
