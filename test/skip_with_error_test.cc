@@ -151,8 +151,7 @@ ADD_CASES("BM_error_while_paused", {{"/1/threads:1", true, "error message"},
 int main(int argc, char* argv[]) {
   using namespace benchmark;
   benchmark::Initialize(&argc, argv);
-  JSON Res = RunBenchmarks(FindSpecifiedBenchmarks());
-  JSON BMList = Res.at("benchmarks");
+  JSON BMList = RunBenchmarks(FindSpecifiedBenchmarks());
 
   auto EB = ExpectedResults.begin();
 

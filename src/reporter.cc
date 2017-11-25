@@ -121,9 +121,11 @@ void ConsoleReporter::ReportResults(JSON const& result) {
     bool print_header = !printed_header_;
     // --- or if the format is tabular and this run
     //     has different fields from the prev header
-    UserCounters counters = run.at("counters");
-    print_header |= (output_options_ & OO_Tabular) &&
-                    (!internal::SameNames(counters, prev_counters_));
+    UserCounters counters;
+    if (output_options_ & OO_Tabular && run.count("counters") != 0) {
+      counters = run.at("counters").get<UserCounters>();
+      print_header |= !internal::SameNames(counters, prev_counters_);
+    }
     if (print_header) {
       printed_header_ = true;
       prev_counters_ = counters;
@@ -135,7 +137,11 @@ void ConsoleReporter::ReportResults(JSON const& result) {
     PrintRunData(run);
   };
   JSON runs = result.at("runs");
-  for (JSON R : runs) ReportSingle(R);
+  if (runs.size() == 1 || !result.at("report_aggregates_only").get<bool>()) {
+    for (JSON R : runs) ReportSingle(R);
+  }
+  JSON stats = result.at("stats");
+  for (JSON R : stats) ReportSingle(R);
   FlushStreams();
 }
 
@@ -184,18 +190,21 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
             result.get_at<std::string>("label").c_str());
   }
 
-  UserCounters counters = result.at("counters");
-  for (auto& c : counters) {
-    auto const& s = HumanReadableNumber(c.second.value, 1000);
-    if (output_options & ConsoleReporter::OO_Tabular) {
-      if (c.second.flags & Counter::kIsRate) {
-        printer(Out, COLOR_DEFAULT, " %8s/s", s.c_str());
+  if (result.at("counters") != 0) {
+    UserCounters counters = result.at("counters");
+    for (auto& c : counters) {
+      auto const& s = HumanReadableNumber(c.second.value, 1000);
+      if (output_options & ConsoleReporter::OO_Tabular) {
+        if (c.second.flags & Counter::kIsRate) {
+          printer(Out, COLOR_DEFAULT, " %8s/s", s.c_str());
+        } else {
+          printer(Out, COLOR_DEFAULT, " %10s", s.c_str());
+        }
       } else {
-        printer(Out, COLOR_DEFAULT, " %10s", s.c_str());
+        const char* unit = (c.second.flags & Counter::kIsRate) ? "/s" : "";
+        printer(Out, COLOR_DEFAULT, " %s=%s%s", c.first.c_str(), s.c_str(),
+                unit);
       }
-    } else {
-      const char* unit = (c.second.flags & Counter::kIsRate) ? "/s" : "";
-      printer(Out, COLOR_DEFAULT, " %s=%s%s", c.first.c_str(), s.c_str(), unit);
     }
   }
 }
@@ -221,6 +230,7 @@ void ConsoleReporter::PrintRunData(const JSON& result) {
   auto& Out = GetOutputStream();
   PrinterFn* printer =
       (output_options_ & OO_Color) ? (PrinterFn*)ColorPrintf : IgnoreColorPrint;
+
   std::string Name = result.at("name");
   std::string Kind = result.at("kind");
 

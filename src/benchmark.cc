@@ -421,8 +421,8 @@ JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
   auto stat_reports = ComputeStats(run_reports, b.info->statistics);
   if ((b.info->complexity != oNone) && b.last_benchmark_instance) {
     auto additional_run_stats = ComputeBigO(b, *complexity_reports);
-    stat_reports.insert(stat_reports.end(), additional_run_stats.begin(),
-                        additional_run_stats.end());
+    if (!additional_run_stats.is_null())
+      stat_reports.push_back(additional_run_stats);
     complexity_reports->clear();
   }
 
