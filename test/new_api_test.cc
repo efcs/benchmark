@@ -15,6 +15,7 @@ int main(int argc, char **argv) {
   auto *B2 = RegisterBenchmark("bench2", BMF);
   JSON res1 = RunBenchmark(B1);
   JSON res2 = RunBenchmark(B2);
+  JSON cmps = CompareResults(res1, res2);
   ReportResults(res1);
   ReportResults(res2);
 }

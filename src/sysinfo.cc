@@ -51,23 +51,10 @@
 #include "log.h"
 #include "sleep.h"
 #include "string_util.h"
+#include "utility.h"
 
 namespace benchmark {
 namespace {
-
-void PrintImp(std::ostream& out) { out << std::endl; }
-
-template <class First, class... Rest>
-void PrintImp(std::ostream& out, First&& f, Rest&&... rest) {
-  out << std::forward<First>(f);
-  PrintImp(out, std::forward<Rest>(rest)...);
-}
-
-template <class... Args>
-BENCHMARK_NORETURN void PrintErrorAndDie(Args&&... args) {
-  PrintImp(std::cerr, std::forward<Args>(args)...);
-  std::exit(EXIT_FAILURE);
-}
 
 #ifdef BENCHMARK_HAS_SYSCTL
 

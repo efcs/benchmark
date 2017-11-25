@@ -987,6 +987,8 @@ inline JSON RunBenchmarks(std::vector<internal::Benchmark*> L) {
   return RunBenchmarks(IL, false);
 }
 
+JSON CompareResults(JSON const& R1, JSON const& R2);
+
 JSON GetContext();
 void ReportResults(JSON const& Res);
 
