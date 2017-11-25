@@ -51,40 +51,6 @@
 namespace benchmark {
 
 namespace {
-
-std::ostream*& GetOutputStreamImp() {
-  static std::ostream* Out = &std::cout;
-  return Out;
-}
-
-std::ostream*& GetErrorStreamImp() {
-  static std::ostream* Err = &std::cerr;
-  return Err;
-}
-
-}  // end namespace
-
-std::ostream* SetOutputStream(std::ostream* In) {
-  if (In == nullptr) In = &std::cout;
-  std::ostream*& Out = GetOutputStreamImp();
-  std::ostream* Last = Out;
-  Out = In;
-  return Last;
-}
-
-std::ostream& GetOutputStream() { return *GetOutputStreamImp(); }
-
-std::ostream* SetErrorStream(std::ostream* In) {
-  if (In == nullptr) In = &std::cerr;
-  std::ostream*& Out = GetErrorStreamImp();
-  std::ostream* Last = Out;
-  Out = In;
-  return Last;
-}
-
-std::ostream& GetErrorStream() { return *GetErrorStreamImp(); }
-
-namespace {
 static const size_t kMaxIterations = 1000000000;
 }  // end namespace
 
