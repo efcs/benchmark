@@ -13,8 +13,7 @@ int main(int argc, char **argv) {
   };
   auto *B1 = RegisterBenchmark("bench1", BMF);
   auto *B2 = RegisterBenchmark("bench2", BMF);
-  JSON res1 = RunBenchmark(B1);
-  JSON res2 = RunBenchmark(B2);
-  JSON cmps = CompareResults(res1, res2);
-  ReportResults(cmps);
+  ReportResults(
+      CompareResults(RunBenchmark(B1), RunBenchmark(B2))
+  );
 }
