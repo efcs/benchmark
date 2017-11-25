@@ -131,8 +131,10 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
         run.get_at<double>("real_accumulated_time"));
     cpu_accumulated_time_stat.emplace_back(
         run.get_at<double>("cpu_accumulated_time"));
-    items_per_second_stat.emplace_back(run.get_at<double>("items_per_second"));
-    bytes_per_second_stat.emplace_back(run.get_at<double>("bytes_per_second"));
+
+    // FIXME: EricWF
+    // items_per_second_stat.emplace_back(run.get_at<double>("items_per_second"));
+    // bytes_per_second_stat.emplace_back(run.get_at<double>("bytes_per_second"));
     // user counters
     UserCounters UC = run["counters"];
     for (auto const& cnt : UC) {

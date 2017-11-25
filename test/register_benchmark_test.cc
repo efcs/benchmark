@@ -8,13 +8,12 @@
 
 namespace {
 
-class TestReporter : public benchmark::ConsoleReporter {
- public:
-  virtual void ReportResults(const benchmark::JSON& report) override {
-    all_runs_.push_back(report);
-    ConsoleReporter::ReportResults(report);
-  }
+using namespace benchmark;
 
+struct ReporterCallback {
+  void operator()(CallbackKind K, JSON& J) {
+    if (K == CK_Report) all_runs_.push_back(J);
+  }
   std::vector<benchmark::JSON> all_runs_;
 };
 
@@ -22,22 +21,16 @@ struct TestCase {
   std::string name;
   const char* label;
   // Note: not explicit as we rely on it being converted through ADD_CASES.
-  TestCase(const char* xname) : TestCase(xname, nullptr) {}
   TestCase(const char* xname, const char* xlabel)
       : name(xname), label(xlabel) {}
+  TestCase(const char* xname) : TestCase(xname, nullptr) {}
 
-  void CheckRun(benchmark::JSON const& json_root) const {
-    CHECK(json_root.at("stats").size() == 0);
-    CHECK(json_root.at("runs").size() == 1);
-    benchmark::JSON json = json_root.at("runs")[0];
-    std::string BName = json.at("name");
-    CHECK(name == BName) << "expected " << name << " got " << BName;
+  void CheckRun(internal::BenchmarkInstance const& I) const {
+    CHECK(name == I.name) << "expected " << name << " got " << I.name;
     if (label) {
-      CHECK(json.count("label") == 1);
-      std::string L = json.at("label");
-      CHECK(L == label) << "expected " << label << " got " << L;
-    } else {
-      CHECK(json.count("label") == 0);
+      // CHECK(json.count("label") == 1);
+      // std::string L = json.at("label");
+      // CHECK(L == label) << "expected " << label << " got " << L;
     }
   }
 };
@@ -123,7 +116,7 @@ void TestRegistrationAtRuntime() {
       st.SetLabel(x);
     };
     benchmark::RegisterBenchmark("lambda_benchmark", capturing_lam);
-    AddCases({{"lambda_benchmark", x}});
+    AddCases({{"lambda_benchmark", "42"}});
   }
 #endif
 }
@@ -133,14 +126,13 @@ void TestRegistrationAtRuntime() {
 void RunTestOne() {
   TestRegistrationAtRuntime();
 
-  TestReporter test_reporter;
-  benchmark::RunSpecifiedBenchmarks(&test_reporter);
+  BenchmarkInstanceList All = FindSpecifiedBenchmarks();
 
   auto EB = ExpectedResults.begin();
 
-  for (benchmark::JSON const& run : test_reporter.all_runs_) {
+  for (auto I : All) {
     assert(EB != ExpectedResults.end());
-    EB->CheckRun(run);
+    EB->CheckRun(I);
     ++EB;
   }
   assert(EB == ExpectedResults.end());
@@ -154,21 +146,17 @@ void RunTestTwo() {
          "must have at least one registered benchmark");
   ExpectedResults.clear();
   benchmark::ClearRegisteredBenchmarks();
-
-  TestReporter test_reporter;
-  size_t num_ran = benchmark::RunSpecifiedBenchmarks(&test_reporter);
-  assert(num_ran == 0);
-  assert(test_reporter.all_runs_.begin() == test_reporter.all_runs_.end());
-
+  BenchmarkInstanceList AllRuns = FindSpecifiedBenchmarks();
+  assert(AllRuns.size() == 0);
   TestRegistrationAtRuntime();
-  num_ran = benchmark::RunSpecifiedBenchmarks(&test_reporter);
-  assert(num_ran == ExpectedResults.size());
+  BenchmarkInstanceList found = FindSpecifiedBenchmarks();
+  assert(found.size() == ExpectedResults.size());
 
   auto EB = ExpectedResults.begin();
 
-  for (benchmark::JSON const& run : test_reporter.all_runs_) {
+  for (internal::BenchmarkInstance I : found) {
     assert(EB != ExpectedResults.end());
-    EB->CheckRun(run);
+    EB->CheckRun(I);
     ++EB;
   }
   assert(EB == ExpectedResults.end());

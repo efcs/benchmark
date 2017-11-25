@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "benchmark/benchmark.h"
-#include "benchmark_api_internal.h"
 #include "internal_macros.h"
 
 #ifndef BENCHMARK_OS_WINDOWS
@@ -34,9 +33,9 @@
 #include <thread>
 #include <unordered_map>
 
+#include "benchmark_commandline.h"
 #include "check.h"
 #include "colorprint.h"
-#include "commandlineflags.h"
 #include "complexity.h"
 #include "counter.h"
 #include "internal_macros.h"
@@ -48,50 +47,6 @@
 #include "string_util.h"
 #include "sysinfo.h"
 #include "timers.h"
-
-DEFINE_bool(benchmark_list_tests, false,
-            "Print a list of benchmarks. This option overrides all other "
-            "options.");
-
-DEFINE_string(benchmark_filter, ".",
-              "A regular expression that specifies the set of benchmarks "
-              "to execute.  If this flag is empty, no benchmarks are run.  "
-              "If this flag is the string \"all\", all benchmarks linked "
-              "into the process are run.");
-
-DEFINE_double(benchmark_min_time, 0.5,
-              "Minimum number of seconds we should run benchmark before "
-              "results are considered significant.  For cpu-time based "
-              "tests, this is the lower bound on the total cpu time "
-              "used by all threads that make up the test.  For real-time "
-              "based tests, this is the lower bound on the elapsed time "
-              "of the benchmark execution, regardless of number of "
-              "threads.");
-
-DEFINE_int32(benchmark_repetitions, 1,
-             "The number of runs of each benchmark. If greater than 1, the "
-             "mean and standard deviation of the runs will be reported.");
-
-DEFINE_bool(benchmark_report_aggregates_only, false,
-            "Report the result of each benchmark repetitions. When 'true' is "
-            "specified only the mean, standard deviation, and other statistics "
-            "are reported for repeated benchmarks.");
-
-DEFINE_string(benchmark_out, "", "The file to write additonal output to");
-
-DEFINE_string(benchmark_color, "auto",
-              "Whether to use colors in the output.  Valid values: "
-              "'true'/'yes'/1, 'false'/'no'/0, and 'auto'. 'auto' means to use "
-              "colors if the output is being sent to a terminal and the TERM "
-              "environment variable is set to a terminal type that supports "
-              "colors.");
-
-DEFINE_bool(benchmark_counters_tabular, false,
-            "Whether to use tabular format when printing user counters to "
-            "the console.  Valid values: 'true'/'yes'/1, 'false'/'no'/0."
-            "Defaults to false.");
-
-DEFINE_int32(v, 0, "The level of verbose logging to output");
 
 namespace benchmark {
 
@@ -257,6 +212,41 @@ class ThreadTimer {
 };
 
 namespace {
+using CallbackEntry = std::pair<int, CallbackType>;
+using CallbackList = std::vector<CallbackEntry>;
+
+int GetNextCallbackID() {
+  static int ID = 0;
+  return ID++;
+}
+
+CallbackList* GetCallbackList() {
+  static CallbackList callbacks;
+  return &callbacks;
+}
+
+void InvokeCallbacks(CallbackKind K, JSON& J) {
+  for (auto& CB : *GetCallbackList()) CB.second(K, J);
+}
+
+}  // end namespace
+
+int RegisterCallback(CallbackType CB) {
+  int ID = GetNextCallbackID();
+  GetCallbackList()->emplace_back(ID, CB);
+  return ID;
+}
+
+void EraseCallback(int ID) {
+  auto& CBList = *GetCallbackList();
+  CBList.erase(std::remove_if(
+      CBList.begin(), CBList.end(),
+      [=](CallbackEntry const& Ent) { return Ent.first == ID; }));
+}
+
+void ClearCallbacks() { GetCallbackList()->clear(); }
+
+namespace {
 
 JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
                      const internal::ThreadManager::Result& results,
@@ -334,17 +324,18 @@ void RunInThread(const benchmark::internal::BenchmarkInstance* b, size_t iters,
   manager->NotifyThreadComplete();
 }
 
-JSON RunBenchmark(const benchmark::internal::BenchmarkInstance& b,
-                  std::vector<JSON>* complexity_reports) {
+JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
+                           std::vector<JSON>* complexity_reports) {
   std::vector<JSON> run_reports;
-
+  std::vector<JSON> internal_complexity_reports;
+  if (complexity_reports == nullptr)
+    complexity_reports = &internal_complexity_reports;
   const bool has_explicit_iteration_count = b.info->iterations != 0;
   size_t iters = has_explicit_iteration_count ? b.info->iterations : 1;
   std::unique_ptr<internal::ThreadManager> manager;
   std::vector<std::thread> pool(b.threads - 1);
   const int repeats = b.info->repetitions != 0 ? b.info->repetitions
                                                : FLAGS_benchmark_repetitions;
-
   for (int repetition_num = 0; repetition_num < repeats; repetition_num++) {
     for (;;) {
       // Try benchmark
@@ -441,8 +432,11 @@ JSON RunBenchmark(const benchmark::internal::BenchmarkInstance& b,
            ? FLAGS_benchmark_report_aggregates_only
            : b.info->report_mode == internal::RM_ReportAggregatesOnly);
 
+  JSON instance_info{{"args", b.arg}, {"threads", b.threads}};
+
   JSON reports_json = {{"name", b.name},
-                       {"family", b.info->index},
+                       {"family", b.info->family_name},
+                       {"instance", instance_info},
                        {"runs", run_reports},
                        {"stats", stat_reports},
                        {"report_aggregates_only", report_aggregates_only}};
@@ -450,6 +444,14 @@ JSON RunBenchmark(const benchmark::internal::BenchmarkInstance& b,
 }
 
 }  // namespace
+
+JSON RunBenchmark(BenchmarkInstance const& I, bool Report) {
+  JSON Res = RunSingleBenchmarkImp(I, nullptr);
+  InvokeCallbacks(CK_Report, Res);
+  if (Report) GetGlobalConsoleReporter()(CK_Report, Res);
+  return Res;
+}
+
 }  // namespace internal
 
 State::State(size_t max_iters, const std::vector<int>& ranges, int thread_i,
@@ -526,45 +528,10 @@ void State::FinishKeepRunning() {
   manager_->StartStopBarrier();
 }
 
-namespace {
-using CallbackEntry = std::pair<int, CallbackType>;
-using CallbackList = std::vector<CallbackEntry>;
-
-int GetNextCallbackID() {
-  static int ID = 0;
-  return ID++;
-}
-
-CallbackList* GetCallbackList() {
-  static CallbackList callbacks;
-  return &callbacks;
-}
-
-void InvokeCallbacks(CallbackKind K, JSON& J) {
-  for (auto& CB : *GetCallbackList()) CB.second(K, J);
-}
-
-}  // end namespace
-
-int RegisterCallback(CallbackType CB) {
-  int ID = GetNextCallbackID();
-  GetCallbackList()->emplace_back(ID, CB);
-  return ID;
-}
-
-void EraseCallback(int ID) {
-  auto& CBList = *GetCallbackList();
-  CBList.erase(std::remove_if(
-      CBList.begin(), CBList.end(),
-      [=](CallbackEntry const& Ent) { return Ent.first == ID; }));
-}
-
-void ClearCallbacks() { GetCallbackList()->clear(); }
-
 namespace internal {
 namespace {
 
-std::pair<int, int> GetNameAndStatFieldWidths(
+JSON GetNameAndStatFieldWidths(
     const std::vector<BenchmarkInstance>& benchmarks) {
   // Determine the width of the name field using a minimum width of 10.
   bool has_repetitions = FLAGS_benchmark_repetitions > 1;
@@ -579,10 +546,20 @@ std::pair<int, int> GetNameAndStatFieldWidths(
       stat_field_width = std::max<size_t>(stat_field_width, Stat.name_.size());
   }
   if (has_repetitions) name_field_width += 1 + stat_field_width;
-  return {name_field_width, stat_field_width};
+  JSON res{{"name_field_width", name_field_width},
+           {"stat_field_width", stat_field_width}};
+  return res;
 }
 
-JSON GetContext(const BenchmarkInstanceList& benchmarks) {
+void DisplayContextOnce() {
+  static bool guard =
+      (PrintBasicContext(&GetErrorStream(), GetContext()), true);
+  ((void)guard);
+}
+}  // end namespace
+}  // end namespace internal
+
+JSON GetContext() {
 #if defined(NDEBUG)
   const char build_type[] = "release";
 #else
@@ -590,177 +567,76 @@ JSON GetContext(const BenchmarkInstanceList& benchmarks) {
 #endif
   // Print header here
   JSON context{
-      {"name_field_width", GetNameAndStatFieldWidths(benchmarks).first},
       {"date", LocalDateTimeString()},
       {"library_build_type", build_type},
       {"cpu_info", CPUInfo::Get()}};
   return context;
 }
 
-JSON RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks) {
-  JSON context = GetContext(benchmarks);
-  JSON benchmark_res = JSON::array();
-
-  // Keep track of runing times of all instances of current benchmark
-  std::vector<JSON> complexity_reports;
-
-  // We flush streams after invoking reporter methods that write to them. This
-  // ensures users get timely updates even when streams are not line-buffered.
-  auto flushStreams = []() {
-    std::flush(GetOutputStream());
-    std::flush(GetErrorStream());
+JSON RunBenchmarks(const std::vector<internal::BenchmarkInstance>& benchmarks,
+                   bool ReportConsole) {
+  internal::DisplayContextOnce();
+  auto invokeAllCallbacks = [&](CallbackKind K, JSON& J) {
+    internal::InvokeCallbacks(K, J);
+    if (ReportConsole) GetGlobalConsoleReporter()(K, J);
   };
+  JSON initial_info = internal::GetNameAndStatFieldWidths(benchmarks);
+  invokeAllCallbacks(CK_Initial, initial_info);
 
-  InvokeCallbacks(CK_Context, context);
-  flushStreams();
-
+  std::vector<JSON> complexity_reports;
+  JSON benchmark_res = JSON::array();
   for (const auto& benchmark : benchmarks) {
-    JSON report = RunBenchmark(benchmark, &complexity_reports);
-    InvokeCallbacks(CK_Report, report);
+    JSON report =
+        internal::RunSingleBenchmarkImp(benchmark, &complexity_reports);
+    invokeAllCallbacks(CK_Report, report);
     benchmark_res.push_back(report);
-    flushStreams();
   }
 
-  JSON res{{"context", context}, {"benchmarks", benchmark_res}};
-  InvokeCallbacks(CK_Final, res);
-  flushStreams();
-
-  return res;
+  invokeAllCallbacks(CK_Final, benchmark_res);
+  return benchmark_res;
 }
-
-}  // end namespace
-
-ConsoleReporter::OutputOptions GetOutputOptions(bool force_no_color) {
-  int output_opts = ConsoleReporter::OO_Defaults;
-  if ((FLAGS_benchmark_color == "auto" && IsColorTerminal()) ||
-      IsTruthyFlagValue(FLAGS_benchmark_color)) {
-    output_opts |= ConsoleReporter::OO_Color;
-  } else {
-    output_opts &= ~ConsoleReporter::OO_Color;
-  }
-  if(force_no_color) {
-    output_opts &= ~ConsoleReporter::OO_Color;
-  }
-  if(FLAGS_benchmark_counters_tabular) {
-    output_opts |= ConsoleReporter::OO_Tabular;
-  } else {
-    output_opts &= ~ConsoleReporter::OO_Tabular;
-  }
-  return static_cast< ConsoleReporter::OutputOptions >(output_opts);
-}
-
-}  // end namespace internal
 
 size_t RunSpecifiedBenchmarks() {
   std::string spec = FLAGS_benchmark_filter;
   if (spec.empty() || spec == "all")
     spec = ".";  // Regexp that matches all benchmarks
 
-  std::vector<internal::BenchmarkInstance> benchmarks;
-  if (!FindBenchmarksInternal(spec, &benchmarks, &GetErrorStream())) return 0;
+  ErrorCode EC;
+  std::vector<internal::BenchmarkInstance> benchmarks =
+      FindBenchmarks(spec, &EC);
+  if (EC) {
+    GetErrorStream() << "Failed to initialize regex \"" << spec
+                     << "\". Error: " << EC.message() << std::endl;
+    return 0;
+  }
   if (benchmarks.empty()) {
     GetErrorStream() << "Failed to match any benchmarks against regex: " << spec
                      << "\n";
     return 0;
   }
 
-  ConsoleReporter CR(internal::GetOutputOptions());
-
-  auto& Out = GetOutputStream();
-
   if (FLAGS_benchmark_list_tests) {
-    for (auto const& benchmark : benchmarks) Out << benchmark.name << "\n";
-  } else {
-    JSON Res = internal::RunBenchmarks(benchmarks);
-    std::string const& fname = FLAGS_benchmark_out;
-
-    if (!fname.empty()) {
-      std::ofstream output_file;
-      output_file.open(fname);
-      if (!output_file.is_open()) {
-        GetErrorStream() << "invalid file name: '" << fname << std::endl;
-        std::exit(1);
-      }
-      output_file << Res << std::endl;
-    }
+    for (auto const& benchmark : benchmarks)
+      GetOutputStream() << benchmark.name << "\n";
+    return benchmarks.size();
   }
+
+  JSON Res = RunBenchmarks(benchmarks, /*ReportConsole*/ true);
+  // If --benchmark_out=<fname> is specified, write the final results to it.
+  if (!FLAGS_benchmark_out.empty()) {
+    std::ofstream output_file;
+    output_file.open(FLAGS_benchmark_out);
+    if (!output_file.is_open()) {
+      GetErrorStream() << "invalid file name: '" << FLAGS_benchmark_out
+                       << std::endl;
+      std::exit(1);
+    }
+    JSON full_res{{"context", GetContext()}, {"benchmarks", Res}};
+    output_file << std::setw(2) << full_res << std::endl;
+  }
+
   return benchmarks.size();
 }
 
-namespace internal {
-
-void PrintUsageAndExit() {
-  fprintf(stdout,
-          "benchmark"
-          " [--benchmark_list_tests={true|false}]\n"
-          "          [--benchmark_filter=<regex>]\n"
-          "          [--benchmark_min_time=<min_time>]\n"
-          "          [--benchmark_repetitions=<num_repetitions>]\n"
-          "          [--benchmark_report_aggregates_only={true|false}\n"
-          "          [--benchmark_out=<filename>]\n"
-          "          [--benchmark_color={auto|true|false}]\n"
-          "          [--benchmark_counters_tabular={true|false}]\n"
-          "          [--v=<verbosity>]\n");
-  exit(0);
-}
-
-void ParseCommandLineFlags(int* argc, char** argv) {
-  using namespace benchmark;
-  for (int i = 1; i < *argc; ++i) {
-    if (ParseBoolFlag(argv[i], "benchmark_list_tests",
-                      &FLAGS_benchmark_list_tests) ||
-        ParseStringFlag(argv[i], "benchmark_filter", &FLAGS_benchmark_filter) ||
-        ParseDoubleFlag(argv[i], "benchmark_min_time",
-                        &FLAGS_benchmark_min_time) ||
-        ParseInt32Flag(argv[i], "benchmark_repetitions",
-                       &FLAGS_benchmark_repetitions) ||
-        ParseBoolFlag(argv[i], "benchmark_report_aggregates_only",
-                      &FLAGS_benchmark_report_aggregates_only) ||
-        ParseStringFlag(argv[i], "benchmark_out", &FLAGS_benchmark_out) ||
-        ParseStringFlag(argv[i], "benchmark_color", &FLAGS_benchmark_color) ||
-        // "color_print" is the deprecated name for "benchmark_color".
-        // TODO: Remove this.
-        ParseStringFlag(argv[i], "color_print", &FLAGS_benchmark_color) ||
-        ParseBoolFlag(argv[i], "benchmark_counters_tabular",
-                        &FLAGS_benchmark_counters_tabular) ||
-        ParseInt32Flag(argv[i], "v", &FLAGS_v)) {
-      for (int j = i; j != *argc - 1; ++j) argv[j] = argv[j + 1];
-
-      --(*argc);
-      --i;
-    } else if (IsFlag(argv[i], "help")) {
-      PrintUsageAndExit();
-    }
-  }
-  if (FLAGS_benchmark_color.empty()) {
-    PrintUsageAndExit();
-  }
-}
-
-int InitializeStreams() {
-  static std::ios_base::Init init;
-  return 0;
-}
-
-}  // end namespace internal
-
-void Initialize(int* argc, char** argv) {
-  internal::ParseCommandLineFlags(argc, argv);
-  internal::LogLevel() = FLAGS_v;
-}
-
-BenchmarkInstanceList FindBenchmarks() {
-  return FindBenchmarks(FLAGS_benchmark_filter);
-}
-JSON RunBenchmarks(BenchmarkInstanceList const& Benches) {
-  return internal::RunBenchmarks(Benches);
-}
-
-bool ReportUnrecognizedArguments(int argc, char** argv) {
-  for (int i = 1; i < argc; ++i) {
-    fprintf(stderr, "%s: error: unrecognized command-line flag: %s\n", argv[0], argv[i]);
-  }
-  return argc > 1;
-}
 
 }  // end namespace benchmark

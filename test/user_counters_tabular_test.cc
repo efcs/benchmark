@@ -46,8 +46,6 @@ ADD_CASES(TC_ConsoleOut, {
     {"^BM_CounterSet2_Tabular/threads:%int %console_report [ ]*%hrfloat [ ]*%hrfloat [ ]*%hrfloat$"},
 // clang-format on
 });
-ADD_CASES(TC_CSVOut, {{"%csv_header,"
-                       "\"Bar\",\"Bat\",\"Baz\",\"Foo\",\"Frob\",\"Lob\""}});
 
 // ========================================================================= //
 // ------------------------- Tabular Counters Output ----------------------- //
@@ -67,20 +65,7 @@ void BM_Counters_Tabular(benchmark::State& state) {
   });
 }
 BENCHMARK(BM_Counters_Tabular)->ThreadRange(1, 16);
-ADD_CASES(TC_JSONOut, {{"\"name\": \"BM_Counters_Tabular/threads:%int\",$"},
-                       {"\"iterations\": %int,$", MR_Next},
-                       {"\"real_time\": %float,$", MR_Next},
-                       {"\"cpu_time\": %float,$", MR_Next},
-                       {"\"time_unit\": \"ns\",$", MR_Next},
-                       {"\"Bar\": %float,$", MR_Next},
-                       {"\"Bat\": %float,$", MR_Next},
-                       {"\"Baz\": %float,$", MR_Next},
-                       {"\"Foo\": %float,$", MR_Next},
-                       {"\"Frob\": %float,$", MR_Next},
-                       {"\"Lob\": %float$", MR_Next},
-                       {"}", MR_Next}});
-ADD_CASES(TC_CSVOut, {{"^\"BM_Counters_Tabular/threads:%int\",%csv_report,"
-                       "%float,%float,%float,%float,%float,%float$"}});
+
 // VS2013 does not allow this function to be passed as a lambda argument
 // to CHECK_BENCHMARK_RESULTS()
 void CheckTabular(Results const& e) {
@@ -111,20 +96,7 @@ void BM_CounterRates_Tabular(benchmark::State& state) {
   });
 }
 BENCHMARK(BM_CounterRates_Tabular)->ThreadRange(1, 16);
-ADD_CASES(TC_JSONOut, {{"\"name\": \"BM_CounterRates_Tabular/threads:%int\",$"},
-                       {"\"iterations\": %int,$", MR_Next},
-                       {"\"real_time\": %float,$", MR_Next},
-                       {"\"cpu_time\": %float,$", MR_Next},
-                       {"\"time_unit\": \"ns\",$", MR_Next},
-                       {"\"Bar\": %float,$", MR_Next},
-                       {"\"Bat\": %float,$", MR_Next},
-                       {"\"Baz\": %float,$", MR_Next},
-                       {"\"Foo\": %float,$", MR_Next},
-                       {"\"Frob\": %float,$", MR_Next},
-                       {"\"Lob\": %float$", MR_Next},
-                       {"}", MR_Next}});
-ADD_CASES(TC_CSVOut, {{"^\"BM_CounterRates_Tabular/threads:%int\",%csv_report,"
-                       "%float,%float,%float,%float,%float,%float$"}});
+
 // VS2013 does not allow this function to be passed as a lambda argument
 // to CHECK_BENCHMARK_RESULTS()
 void CheckTabularRate(Results const& e) {
@@ -155,17 +127,7 @@ void BM_CounterSet0_Tabular(benchmark::State& state) {
   });
 }
 BENCHMARK(BM_CounterSet0_Tabular)->ThreadRange(1, 16);
-ADD_CASES(TC_JSONOut, {{"\"name\": \"BM_CounterSet0_Tabular/threads:%int\",$"},
-                       {"\"iterations\": %int,$", MR_Next},
-                       {"\"real_time\": %float,$", MR_Next},
-                       {"\"cpu_time\": %float,$", MR_Next},
-                       {"\"time_unit\": \"ns\",$", MR_Next},
-                       {"\"Bar\": %float,$", MR_Next},
-                       {"\"Baz\": %float,$", MR_Next},
-                       {"\"Foo\": %float$", MR_Next},
-                       {"}", MR_Next}});
-ADD_CASES(TC_CSVOut, {{"^\"BM_CounterSet0_Tabular/threads:%int\",%csv_report,"
-                       "%float,,%float,%float,,"}});
+
 // VS2013 does not allow this function to be passed as a lambda argument
 // to CHECK_BENCHMARK_RESULTS()
 void CheckSet0(Results const& e) {
@@ -187,17 +149,7 @@ void BM_CounterSet1_Tabular(benchmark::State& state) {
   });
 }
 BENCHMARK(BM_CounterSet1_Tabular)->ThreadRange(1, 16);
-ADD_CASES(TC_JSONOut, {{"\"name\": \"BM_CounterSet1_Tabular/threads:%int\",$"},
-                       {"\"iterations\": %int,$", MR_Next},
-                       {"\"real_time\": %float,$", MR_Next},
-                       {"\"cpu_time\": %float,$", MR_Next},
-                       {"\"time_unit\": \"ns\",$", MR_Next},
-                       {"\"Bar\": %float,$", MR_Next},
-                       {"\"Baz\": %float,$", MR_Next},
-                       {"\"Foo\": %float$", MR_Next},
-                       {"}", MR_Next}});
-ADD_CASES(TC_CSVOut, {{"^\"BM_CounterSet1_Tabular/threads:%int\",%csv_report,"
-                       "%float,,%float,%float,,"}});
+
 // VS2013 does not allow this function to be passed as a lambda argument
 // to CHECK_BENCHMARK_RESULTS()
 void CheckSet1(Results const& e) {
@@ -223,17 +175,7 @@ void BM_CounterSet2_Tabular(benchmark::State& state) {
   });
 }
 BENCHMARK(BM_CounterSet2_Tabular)->ThreadRange(1, 16);
-ADD_CASES(TC_JSONOut, {{"\"name\": \"BM_CounterSet2_Tabular/threads:%int\",$"},
-                       {"\"iterations\": %int,$", MR_Next},
-                       {"\"real_time\": %float,$", MR_Next},
-                       {"\"cpu_time\": %float,$", MR_Next},
-                       {"\"time_unit\": \"ns\",$", MR_Next},
-                       {"\"Bat\": %float,$", MR_Next},
-                       {"\"Baz\": %float,$", MR_Next},
-                       {"\"Foo\": %float$", MR_Next},
-                       {"}", MR_Next}});
-ADD_CASES(TC_CSVOut, {{"^\"BM_CounterSet2_Tabular/threads:%int\",%csv_report,"
-                       ",%float,%float,%float,,"}});
+
 // VS2013 does not allow this function to be passed as a lambda argument
 // to CHECK_BENCHMARK_RESULTS()
 void CheckSet2(Results const& e) {

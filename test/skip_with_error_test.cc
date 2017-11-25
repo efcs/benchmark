@@ -8,19 +8,6 @@
 
 namespace {
 
-class TestReporter : public benchmark::ConsoleReporter {
- public:
-  virtual void ReportResults(const benchmark::JSON& JS) override {
-    all_runs_.push_back(JS);
-    ConsoleReporter::ReportResults(JS);
-  }
-
-  TestReporter() {}
-  virtual ~TestReporter() {}
-
-  mutable std::vector<benchmark::JSON> all_runs_;
-};
-
 struct TestCase {
   std::string name;
   bool error_occurred;
@@ -162,16 +149,16 @@ ADD_CASES("BM_error_while_paused", {{"/1/threads:1", true, "error message"},
                                     {"/2/threads:8", false, ""}});
 
 int main(int argc, char* argv[]) {
+  using namespace benchmark;
   benchmark::Initialize(&argc, argv);
-
-  TestReporter test_reporter;
-  benchmark::RunSpecifiedBenchmarks(&test_reporter);
+  JSON Res = RunBenchmarks(FindSpecifiedBenchmarks());
+  JSON BMList = Res.at("benchmarks");
 
   auto EB = ExpectedResults.begin();
 
-  for (benchmark::JSON const& run : test_reporter.all_runs_) {
+  for (JSON::iterator It = BMList.begin(); It != BMList.end(); ++It) {
     assert(EB != ExpectedResults.end());
-    EB->CheckRun(run);
+    EB->CheckRun(*It);
     ++EB;
   }
   assert(EB == ExpectedResults.end());

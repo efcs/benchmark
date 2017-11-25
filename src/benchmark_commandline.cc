@@ -1,26 +1,12 @@
-// Copyright 2015 Google Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-#include "commandlineflags.h"
-
-#include <cctype>
-#include <cstdlib>
-#include <cstring>
-#include <iostream>
-#include <limits>
+#define BUILDING_BENCHMARK_COMMANDLINE_CC
+#include "benchmark_commandline.h"
+#include "benchmark/benchmark.h"
+#include "log.h"
 
 namespace benchmark {
+
+namespace internal {
+
 // Parses 'str' for a 32-bit signed integer.  If successful, writes
 // the result to *value and returns true; otherwise leaves *value
 // unchanged and returns false.
@@ -32,8 +18,8 @@ bool ParseInt32(const std::string& src_text, const char* str, int32_t* value) {
   // Has strtol() consumed all characters in the string?
   if (*end != '\0') {
     // No - an invalid character was encountered.
-    std::cerr << src_text << " is expected to be a 32-bit integer, "
-              << "but actually has value \"" << str << "\".\n";
+    GetErrorStream() << src_text << " is expected to be a 32-bit integer, "
+                     << "but actually has value \"" << str << "\".\n";
     return false;
   }
 
@@ -45,10 +31,10 @@ bool ParseInt32(const std::string& src_text, const char* str, int32_t* value) {
       // LONG_MAX or LONG_MIN when the input overflows.)
       result != long_value
       // The parsed value overflows as an Int32.
-      ) {
-    std::cerr << src_text << " is expected to be a 32-bit integer, "
-              << "but actually has value \"" << str << "\", "
-              << "which overflows.\n";
+  ) {
+    GetErrorStream() << src_text << " is expected to be a 32-bit integer, "
+                     << "but actually has value \"" << str << "\", "
+                     << "which overflows.\n";
     return false;
   }
 
@@ -66,8 +52,8 @@ bool ParseDouble(const std::string& src_text, const char* str, double* value) {
   // Has strtol() consumed all characters in the string?
   if (*end != '\0') {
     // No - an invalid character was encountered.
-    std::cerr << src_text << " is expected to be a double, "
-              << "but actually has value \"" << str << "\".\n";
+    GetErrorStream() << src_text << " is expected to be a double, "
+                     << "but actually has value \"" << str << "\".\n";
     return false;
   }
 
@@ -113,7 +99,7 @@ int32_t Int32FromEnv(const char* flag, int32_t default_value) {
   int32_t result = default_value;
   if (!ParseInt32(std::string("Environment variable ") + env_var, string_value,
                   &result)) {
-    std::cout << "The default value " << default_value << " is used.\n";
+    GetOutputStream() << "The default value " << default_value << " is used.\n";
     return default_value;
   }
 
@@ -215,4 +201,73 @@ bool IsTruthyFlagValue(const std::string& value) {
   return isalnum(ch) &&
          !(ch == '0' || ch == 'f' || ch == 'F' || ch == 'n' || ch == 'N');
 }
+
+void PrintUsageAndExit() {
+  fprintf(stdout,
+          "benchmark"
+          " [--benchmark_list_tests={true|false}]\n"
+          "          [--benchmark_filter=<regex>]\n"
+          "          [--benchmark_min_time=<min_time>]\n"
+          "          [--benchmark_repetitions=<num_repetitions>]\n"
+          "          [--benchmark_report_aggregates_only={true|false}\n"
+          "          [--benchmark_out=<filename>]\n"
+          "          [--benchmark_color={auto|true|false}]\n"
+          "          [--benchmark_counters_tabular={true|false}]\n"
+          "          [--v=<verbosity>]\n");
+  exit(0);
+}
+
+void ParseCommandLineFlags(int* argc, char** argv) {
+  using namespace benchmark;
+  for (int i = 1; i < *argc; ++i) {
+    if (ParseBoolFlag(argv[i], "benchmark_list_tests",
+                      &FLAGS_benchmark_list_tests) ||
+        ParseStringFlag(argv[i], "benchmark_filter", &FLAGS_benchmark_filter) ||
+        ParseDoubleFlag(argv[i], "benchmark_min_time",
+                        &FLAGS_benchmark_min_time) ||
+        ParseInt32Flag(argv[i], "benchmark_repetitions",
+                       &FLAGS_benchmark_repetitions) ||
+        ParseBoolFlag(argv[i], "benchmark_report_aggregates_only",
+                      &FLAGS_benchmark_report_aggregates_only) ||
+        ParseStringFlag(argv[i], "benchmark_out", &FLAGS_benchmark_out) ||
+        ParseStringFlag(argv[i], "benchmark_color", &FLAGS_benchmark_color) ||
+        // "color_print" is the deprecated name for "benchmark_color".
+        // TODO: Remove this.
+        ParseStringFlag(argv[i], "color_print", &FLAGS_benchmark_color) ||
+        ParseBoolFlag(argv[i], "benchmark_counters_tabular",
+                      &FLAGS_benchmark_counters_tabular) ||
+        ParseInt32Flag(argv[i], "v", &FLAGS_v)) {
+      for (int j = i; j != *argc - 1; ++j) argv[j] = argv[j + 1];
+
+      --(*argc);
+      --i;
+    } else if (IsFlag(argv[i], "help")) {
+      PrintUsageAndExit();
+    }
+  }
+  if (FLAGS_benchmark_color.empty()) {
+    PrintUsageAndExit();
+  }
+}
+
+int InitializeStreams() {
+  static std::ios_base::Init init;
+  return 0;
+}
+
+}  // end namespace internal
+
+void Initialize(int* argc, char** argv) {
+  internal::ParseCommandLineFlags(argc, argv);
+  internal::LogLevel() = FLAGS_v;
+}
+
+bool ReportUnrecognizedArguments(int argc, char** argv) {
+  for (int i = 1; i < argc; ++i) {
+    fprintf(stderr, "%s: error: unrecognized command-line flag: %s\n", argv[0],
+            argv[i]);
+  }
+  return argc > 1;
+}
+
 }  // end namespace benchmark

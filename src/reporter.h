@@ -24,10 +24,14 @@ class ConsoleReporter {
         prev_counters_(),
         printed_header_(false) {}
 
-  void operator()(CallbackKind K, JSON& J) {
+  void operator()(CallbackKind K, JSON const& J) {
     switch (K) {
+      case CK_Initial:
+        return Initialize(J);
       case CK_Context:
-        return ReportContext(J);
+        PrintBasicContext(&GetErrorStream(), J);
+        std::flush(GetErrorStream());
+        break;
       case CK_Report:
         return ReportResults(J);
       case CK_Final:
@@ -35,41 +39,25 @@ class ConsoleReporter {
     }
   }
 
+  static OutputOptions GetCommandLineOutputOptions(bool force_no_color = false);
+  static ConsoleReporter GetCommandLineReporter() {
+    return ConsoleReporter(GetCommandLineOutputOptions());
+  }
+
  private:
-  void ReportContext(const JSON& context);
+  void Initialize(const JSON& init_info);
   void ReportResults(const JSON& result);
   void PrintRunData(const JSON& report);
   void PrintHeader(const JSON& report);
 
+ private:
   OutputOptions output_options_;
   size_t name_field_width_;
   UserCounters prev_counters_;
   bool printed_header_;
 };
 
-class JSONReporter {
- public:
-  JSONReporter() : first_report_(true) {}
-
-  void operator()(CallbackKind K, JSON& J) {
-    switch (K) {
-      case CK_Context:
-        return ReportContext(J);
-      case CK_Report:
-        return ReportResults(J);
-      case CK_Final:
-        return Finalize();
-    }
-  }
-
- private:
-  void ReportContext(const JSON& context);
-  void ReportResults(const JSON& result);
-  void Finalize();
-
- private:
-  bool first_report_;
-};
+ConsoleReporter& GetGlobalConsoleReporter();
 
 }  // namespace benchmark
 

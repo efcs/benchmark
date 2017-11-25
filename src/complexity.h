@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "benchmark/benchmark.h"
-#include "benchmark_api_internal.h"
 
 namespace benchmark {
 

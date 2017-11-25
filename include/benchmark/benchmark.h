@@ -182,6 +182,7 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 
 #if defined(BENCHMARK_HAS_CXX11)
 #include <initializer_list>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include "json.h"
@@ -241,16 +242,12 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #endif
 
 namespace benchmark {
-class BenchmarkReporter;
 
 #ifdef BENCHMARK_HAS_CXX11
 namespace json_ns = nlohmann;
 using JSON = json_ns::json;
 #endif
 
-namespace internal {
-class BenchmarkInstance;
-}
 
 void Initialize(int* argc, char** argv);
 
@@ -270,39 +267,42 @@ std::ostream& GetOutputStream();
 std::ostream* SetErrorStream(std::ostream* Err);
 std::ostream& GetErrorStream();
 
-enum CallbackKind { CK_Context, CK_Report, CK_Final };
-
-using CallbackType = std::function<void(CallbackKind, JSON&)>;
-int RegisterCallback(CallbackType CB);
-bool RemoveCallback(int ID);
-void ClearCallbacks();
-
 // Report to stdout all arguments in 'argv' as unrecognized except the first.
 // Returns true there is at least on unrecognized argument (i.e. 'argc' > 1).
 bool ReportUnrecognizedArguments(int argc, char** argv);
 
-// Generate a list of benchmarks matching the specified --benchmark_filter flag
-// and if --benchmark_list_tests is specified return after printing the name
-// of each matching benchmark. Otherwise run each matching benchmark and
-// report the results.
-//
-// The second and third overload use the specified 'console_reporter' and
-//  'file_reporter' respectively. 'file_reporter' will write to the file
-//  specified
-//   by '--benchmark_output'. If '--benchmark_output' is not given the
-//  'file_reporter' is ignored.
-//
-// RETURNS: The number of matching benchmarks.
-size_t RunSpecifiedBenchmarks();
-
-typedef std::vector<internal::BenchmarkInstance> BenchmarkInstanceList;
+struct ErrorCode {
+  ErrorCode() : value_(0), message_() {}
+  ErrorCode(int val, std::string const& msg) : value_(val), message_(msg) {}
 
 #ifdef BENCHMARK_HAS_CXX11
-BenchmarkInstanceList FindBenchmarks();
-BenchmarkInstanceList FindBenchmarks(std::string const& Regex);
-JSON RunBenchmarks(BenchmarkInstanceList const&);
-
+  explicit
 #endif
+  operator bool() const {
+    return value_ != 0;
+  }
+
+  const std::string& message() const { return message_; }
+  int value() const { return value_; }
+
+  void clear() {
+    value_ = 0;
+    message_.clear();
+  }
+
+  static ErrorCode Success() { return ErrorCode(); }
+
+ private:
+  int value_;
+  std::string message_;
+};
+
+namespace internal {
+class Benchmark;
+class BenchmarkImp;
+class BenchmarkFamilies;
+class BenchmarkInstance;
+}  // namespace internal
 
 // If this routine is called, peak memory allocation past this point in the
 // benchmark is reported at the end of the benchmark report line. (It is
@@ -312,9 +312,6 @@ JSON RunBenchmarks(BenchmarkInstanceList const&);
 // void MemoryUsage();
 
 namespace internal {
-class Benchmark;
-class BenchmarkImp;
-class BenchmarkFamilies;
 
 void UseCharPointer(char const volatile*);
 
@@ -399,7 +396,6 @@ public:
 
   BENCHMARK_ALWAYS_INLINE operator double const& () const { return value; }
   BENCHMARK_ALWAYS_INLINE operator double      & ()       { return value; }
-
 };
 
 // This is the container for the user-defined counters.
@@ -914,6 +910,9 @@ class Benchmark : protected BenchmarkInfoBase {
   // Equivalent to ThreadRange(NumCPUs(), NumCPUs())
   Benchmark* ThreadPerCpu();
 
+  // Generate all BenchmarkInstance's for this benchmark.
+  std::vector<BenchmarkInstance> GenerateInstances() const;
+
   virtual void Run(State& state) = 0;
 
  protected:
@@ -949,6 +948,64 @@ internal::Benchmark* RegisterBenchmark(const char* name, Lambda&& fn);
 // Remove all registered benchmarks. All pointers to previously registered
 // benchmarks are invalidated.
 void ClearRegisteredBenchmarks();
+
+// Generate a list of benchmarks matching the specified --benchmark_filter flag
+// and if --benchmark_list_tests is specified return after printing the name
+// of each matching benchmark. Otherwise run each matching benchmark and
+// report the results.
+//
+// The second and third overload use the specified 'console_reporter' and
+//  'file_reporter' respectively. 'file_reporter' will write to the file
+//  specified
+//   by '--benchmark_output'. If '--benchmark_output' is not given the
+//  'file_reporter' is ignored.
+//
+// RETURNS: The number of matching benchmarks.
+size_t RunSpecifiedBenchmarks();
+
+#ifdef BENCHMARK_HAS_CXX11
+enum CallbackKind { CK_Initial, CK_Context, CK_Report, CK_Final };
+
+typedef std::vector<internal::BenchmarkInstance> BenchmarkInstanceList;
+
+using CallbackType = std::function<void(CallbackKind, JSON&)>;
+using CallbackList = std::vector<CallbackType>;
+int RegisterCallback(CallbackType CB);
+bool RemoveCallback(int ID);
+void ClearCallbacks();
+
+JSON GetContext();
+
+BenchmarkInstanceList FindSpecifiedBenchmarks();
+BenchmarkInstanceList FindBenchmarks(std::string const& Regex,
+                                     ErrorCode* EC = nullptr);
+
+namespace internal {
+
+JSON RunBenchmark(internal::BenchmarkInstance const& I, bool ReportConsole);
+}  // end namespace internal
+
+JSON RunBenchmarks(BenchmarkInstanceList const&, bool ReportConsole = false);
+
+inline JSON RunBenchmark(internal::Benchmark* BM) {
+  return RunBenchmarks(BM->GenerateInstances(), false);
+}
+
+inline JSON RunBenchmark(const internal::BenchmarkInstance& BI) {
+  return internal::RunBenchmark(BI, false);
+}
+
+inline JSON RunBenchmarks(std::vector<internal::Benchmark*> L) {
+  BenchmarkInstanceList IL;
+  for (auto* Inst : L) {
+    auto NL = Inst->GenerateInstances();
+    IL.insert(IL.end(), NL.begin(), NL.end());
+  }
+  return RunBenchmarks(IL, false);
+}
+
+void ReportResults(JSON const& Res);
+#endif
 
 namespace internal {
 // The class used to hold all Benchmarks created from static function.

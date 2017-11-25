@@ -78,4 +78,6 @@ BENCHMARK_NORETURN void UnreachableImp(const char* FName, int Line);
   ::benchmark::internal::UnreachableImp(__FILE__, __LINE__)
 #endif
 
+#define BENCHMARK_CAT_IMP(X, Y)
+
 #endif  // BENCHMARK_INTERNAL_MACROS_H_

@@ -24,18 +24,7 @@ int AddComplexityTest(std::string big_o_test_name, std::string rms_test_name,
       {{"^%bigo_name %bigo_str %bigo_str[ ]*$"},
        {"^%bigo_name", MR_Not},  // Assert we we didn't only matched a name.
        {"^%rms_name %rms %rms[ ]*$", MR_Next}});
-  AddCases(TC_JSONOut, {{"\"name\": \"%bigo_name\",$"},
-                        {"\"cpu_coefficient\": %float,$", MR_Next},
-                        {"\"real_coefficient\": %float,$", MR_Next},
-                        {"\"big_o\": \"%bigo\",$", MR_Next},
-                        {"\"time_unit\": \"ns\"$", MR_Next},
-                        {"}", MR_Next},
-                        {"\"name\": \"%rms_name\",$"},
-                        {"\"rms\": %float$", MR_Next},
-                        {"}", MR_Next}});
-  AddCases(TC_CSVOut, {{"^\"%bigo_name\",,%float,%float,%bigo,,,,,$"},
-                       {"^\"%bigo_name\"", MR_Not},
-                       {"^\"%rms_name\",,%float,%float,,,,,,$", MR_Next}});
+
   return 0;
 }
 

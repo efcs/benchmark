@@ -51,7 +51,7 @@ class Regex {
   //
   // On failure (and if error is not nullptr), error is populated with a human
   // readable error message if an error occurs.
-  bool Init(const std::string& spec, std::string* error);
+  ErrorCode Init(const std::string& spec);
 
   // Returns whether str matches the compiled regular expression.
   bool Match(const std::string& str);
@@ -70,22 +70,18 @@ class Regex {
 
 #if defined(HAVE_STD_REGEX)
 
-inline bool Regex::Init(const std::string& spec, std::string* error) {
-#ifdef BENCHMARK_HAS_NO_EXCEPTIONS
-  ((void)error); // suppress unused warning
-#else
+inline ErrorCode Regex::Init(const std::string& spec) {
+#ifndef BENCHMARK_HAS_NO_EXCEPTIONS
   try {
 #endif
     re_ = std::regex(spec, std::regex_constants::extended);
     init_ = true;
 #ifndef BENCHMARK_HAS_NO_EXCEPTIONS
   } catch (const std::regex_error& e) {
-    if (error) {
-      *error = e.what();
-    }
+    return ErrorCode(1, e.what());
   }
 #endif
-  return init_;
+  return ErrorCode();
 }
 
 inline Regex::~Regex() {}
@@ -98,27 +94,26 @@ inline bool Regex::Match(const std::string& str) {
 }
 
 #else
-inline bool Regex::Init(const std::string& spec, std::string* error) {
+inline ErrorCode Regex::Init(const std::string& spec) {
   int ec = regcomp(&re_, spec.c_str(), REG_EXTENDED | REG_NOSUB);
   if (ec != 0) {
+    std::string msg = "";
     if (error) {
       size_t needed = regerror(ec, &re_, nullptr, 0);
-      char* errbuf = new char[needed];
-      regerror(ec, &re_, errbuf, needed);
+      std::unique_ptr<char[]> errbuff(new char[needed]);
+      regerror(ec, &re_, errbuf.get(), needed);
 
       // regerror returns the number of bytes necessary to null terminate
       // the string, so we move that when assigning to error.
       CHECK_NE(needed, 0);
-      error->assign(errbuf, needed - 1);
-
-      delete[] errbuf;
+      msg->assign(errbuff.get(), needed - 1);
     }
 
-    return false;
+    return ErrorCode(ec, msg);
   }
 
   init_ = true;
-  return true;
+  return ErrorCode::Success();
 }
 
 inline Regex::~Regex() {

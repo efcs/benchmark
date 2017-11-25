@@ -24,13 +24,20 @@
 
 #include "check.h"
 #include "colorprint.h"
-#include "commandlineflags.h"
+#include "counter.h"
 #include "internal_macros.h"
 #include "string_util.h"
 #include "sysinfo.h"
+
+#include "benchmark_commandline.h"
 #include "timers.h"
 
 namespace benchmark {
+
+static void FlushStreams() {
+  std::flush(GetOutputStream());
+  std::flush(GetErrorStream());
+}
 
 void PrintBasicContext(std::ostream* out, JSON const& context) {
   CHECK(out) << "cannot be null";
@@ -63,13 +70,10 @@ void PrintBasicContext(std::ostream* out, JSON const& context) {
 #endif
 }
 
-void ConsoleReporter::ReportContext(const JSON& context) {
-  name_field_width_ = context.at("name_field_width");
+void ConsoleReporter::Initialize(const JSON& info) {
+  name_field_width_ = info.at("name_field_width");
   printed_header_ = false;
   prev_counters_.clear();
-
-  PrintBasicContext(&GetErrorStream(), context);
-
 #ifdef BENCHMARK_OS_WINDOWS
   if ((output_options_ & OO_Color) && &std::cout != &GetOutputStream()) {
     GetErrorStream()
@@ -132,6 +136,7 @@ void ConsoleReporter::ReportResults(JSON const& result) {
   };
   JSON runs = result.at("runs");
   for (JSON R : runs) ReportSingle(R);
+  FlushStreams();
 }
 
 static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
@@ -236,46 +241,38 @@ void ConsoleReporter::PrintRunData(const JSON& result) {
   printer(Out, COLOR_DEFAULT, "\n");
 }
 
-static std::string IndentJSONString(std::string const& In, int Num) {
-  std::string NewStr;
-  std::string Indent(' ', Num);
-  for (auto ch : In) {
-    NewStr += ch;
-    if (ch == '\n') NewStr += Indent;
-    if (ch == '\r') std::exit(EXIT_FAILURE);
+ConsoleReporter::OutputOptions ConsoleReporter::GetCommandLineOutputOptions(
+    bool force_no_color) {
+  int output_opts = ConsoleReporter::OO_Defaults;
+  if ((FLAGS_benchmark_color == "auto" && IsColorTerminal()) ||
+      internal::IsTruthyFlagValue(FLAGS_benchmark_color)) {
+    output_opts |= ConsoleReporter::OO_Color;
+  } else {
+    output_opts &= ~ConsoleReporter::OO_Color;
   }
-  return NewStr;
+  if (force_no_color) {
+    output_opts &= ~ConsoleReporter::OO_Color;
+  }
+  if (FLAGS_benchmark_counters_tabular) {
+    output_opts |= ConsoleReporter::OO_Tabular;
+  } else {
+    output_opts &= ~ConsoleReporter::OO_Tabular;
+  }
+  return static_cast<ConsoleReporter::OutputOptions>(output_opts);
 }
 
-bool JSONReporter::ReportContext(const JSON& context) {
-  std::ostream& out = GetOutputStream();
-
-  out << "{\n";
-  std::string inner_indent(2, ' ');
-
-  // Open context block and print context information.
-  out << inner_indent << "\"context\":";
-
-  auto TmpStr = IndentJSONString(context.dump(2), 4);
-  CHECK_EQ(TmpStr.back(), '}');
-  TmpStr.erase(TmpStr.size() - 1);
-  out << TmpStr;
-
-  // Close context block and open the list of benchmarks.
-  out << inner_indent << "},\n";
-  out << inner_indent << "\"benchmarks\": [\n";
-  return true;
+ConsoleReporter& GetGlobalConsoleReporter() {
+  static ConsoleReporter CR = ConsoleReporter::GetCommandLineReporter();
+  return CR;
 }
 
-void JSONReporter::ReportResults(const JSON& result) {
-  if (!first_report_) GetOutputStream() << ",\n";
-  first_report_ = false;
-  GetOutputStream() << IndentJSONString(result.dump(2), 4);
-}
-
-void JSONReporter::Finalize() {
-  // Close the list of benchmarks and the top level object.
-  GetOutputStream() << "\n  ]\n}\n";
+void ReportResults(JSON const& J) {
+  if (J.is_array()) {
+    assert(J.size() == 1);
+    GetGlobalConsoleReporter()(CK_Report, J[0]);
+  } else {
+    GetGlobalConsoleReporter()(CK_Report, J);
+  }
 }
 
 }  // end namespace benchmark

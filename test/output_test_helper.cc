@@ -7,7 +7,6 @@
 #include "../src/check.h"  // NOTE: check.h is for internal use only!
 #include "../src/re.h"     // NOTE: re.h is for internal use only
 #include "output_test.h"
-#include "../src/benchmark_api_internal.h"
 
 // ========================================================================= //
 // ------------------------------ Internals -------------------------------- //
@@ -106,36 +105,7 @@ void CheckCases(TestCaseList const& checks, std::stringstream& output) {
   }
 }
 
-class TestReporter : public benchmark::BenchmarkReporter {
- public:
-  TestReporter(std::vector<benchmark::BenchmarkReporter*> reps)
-      : reporters_(reps) {}
-
-  virtual bool ReportContext(const benchmark::JSON& context) override {
-    bool last_ret = false;
-    bool first = true;
-    for (auto rep : reporters_) {
-      bool new_ret = rep->ReportContext(context);
-      CHECK(first || new_ret == last_ret)
-          << "Reports return different values for ReportContext";
-      first = false;
-      last_ret = new_ret;
-    }
-    (void)first;
-    return last_ret;
-  }
-  void ReportResults(const benchmark::JSON& report) override {
-    for (auto rep : reporters_) rep->ReportResults(report);
-  }
-  void Finalize() override {
-    for (auto rep : reporters_) rep->Finalize();
-  }
-
- private:
-  std::vector<benchmark::BenchmarkReporter *> reporters_;
-};
-}
-
+}  // end namespace
 }  // end namespace internal
 
 // ========================================================================= //
@@ -164,11 +134,6 @@ class ResultsChecker {
   void CheckResults(std::stringstream& output);
 
  private:
-
-  void SetHeader_(const std::string& csv_header);
-  void SetValues_(const std::string& entry_csv_line);
-
-
 };
 
 // store the static ResultsChecker in a function to prevent initialization
@@ -202,11 +167,9 @@ void ResultsChecker::CheckResults(std::stringstream& output) {
     CHECK(output.good());
     std::getline(output, line);
     if (on_first) {
-      SetHeader_(line); // this is important
       on_first = false;
       continue;
     }
-    SetValues_(line);
   }
   // finally we can call the subscribed check functions
   for(const auto& p : check_patterns) {
@@ -276,12 +239,10 @@ TestCase::TestCase(std::string re, int rule)
       match_rule(rule),
       substituted_regex(internal::PerformSubstitutions(regex_str)),
       regex(std::make_shared<benchmark::Regex>()) {
-  std::string err_str;
-  regex->Init(substituted_regex,& err_str);
-  CHECK(err_str.empty()) << "Could not construct regex \"" << substituted_regex
-                         << "\""
-                         << "\n    originally \"" << regex_str << "\""
-                         << "\n    got error: " << err_str;
+  benchmark::ErrorCode EC = regex->Init(substituted_regex);
+  CHECK(!EC) << "Could not construct regex \"" << substituted_regex << "\""
+             << "\n    originally \"" << regex_str << "\""
+             << "\n    got error: " << EC.message();
 }
 
 int AddCases(TestCaseID ID, std::initializer_list<TestCase> il) {
@@ -312,22 +273,29 @@ void RunOutputTests(int argc, char* argv[]) {
   using internal::GetTestCaseList;
   benchmark::Initialize(&argc, argv);
 
-    std::stringstream out_stream;
-    std::stringstream err_stream;
+  std::stringstream* out_stream = new std::stringstream();
+  std::stringstream* err_stream = new std::stringstream();
+  benchmark::SetOutputStream(out_stream);
+  benchmark::SetErrorStream(err_stream);
 
   // Create the test reporter and run the benchmarks.
   std::cout << "Running benchmarks...\n";
-  benchmark::RunSpecifiedBenchmarks(&out_stream, &err_stream);
+  benchmark::RunSpecifiedBenchmarks();
 
   std::string msg = "\nTesting Console  Output\n";
   std::string banner(msg.size() - 1, '-');
   std::cout << banner << msg << banner << "\n";
 
-  std::cerr << err_stream.str();
-  std::cout << out_stream.str();
+  std::cerr << err_stream->str();
+  std::cout << out_stream->str();
+  benchmark::SetOutputStream(nullptr);
+  benchmark::SetErrorStream(nullptr);
 
-  internal::CheckCases(GetTestCaseList(TC_ConsoleErr), err_stream);
-  internal::CheckCases(GetTestCaseList(TC_ConsoleOut), out_stream);
+  internal::CheckCases(GetTestCaseList(TC_ConsoleErr), *err_stream);
+  internal::CheckCases(GetTestCaseList(TC_ConsoleOut), *out_stream);
+
+  delete out_stream;
+  delete err_stream;
 
   std::cout << "\n";
 }

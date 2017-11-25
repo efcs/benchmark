@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "benchmark/benchmark.h"
-#include "benchmark_api_internal.h"
 #include "internal_macros.h"
 
 #ifndef BENCHMARK_OS_WINDOWS
@@ -34,8 +33,8 @@
 #include <sstream>
 #include <thread>
 
+#include "benchmark_commandline.h"
 #include "check.h"
-#include "commandlineflags.h"
 #include "complexity.h"
 #include "log.h"
 #include "mutex.h"
@@ -79,9 +78,8 @@ class BenchmarkFamilies {
 
   // Extract the list of benchmark instances that match the specified
   // regular expression.
-  bool FindBenchmarks(const std::string& re,
-                      std::vector<BenchmarkInstance>* benchmarks,
-                      std::ostream* Err);
+  ErrorCode FindBenchmarks(const std::string& re,
+                           std::vector<BenchmarkInstance>* benchmarks);
 
   static const BenchmarkInfoBase* GetInfo(const Benchmark* B) {
     return static_cast<const BenchmarkInfoBase*>(B);
@@ -115,18 +113,90 @@ void BenchmarkFamilies::ClearBenchmarks() {
   families_.shrink_to_fit();
 }
 
-bool BenchmarkFamilies::FindBenchmarks(
-    const std::string& spec, std::vector<BenchmarkInstance>* benchmarks,
-    std::ostream* ErrStream) {
-  CHECK(ErrStream);
-  auto& Err = *ErrStream;
-  // Make regular expression out of command-line flag
-  std::string error_msg;
-  Regex re;
-  if (!re.Init(spec, &error_msg)) {
-    Err << "Could not compile benchmark re: " << error_msg << std::endl;
-    return false;
+std::vector<BenchmarkInstance> Benchmark::GenerateInstances() const {
+  // Family was deleted or benchmark doesn't match
+
+  const std::vector<int> one_thread = {1};
+
+  const std::vector<int>* instance_thread_counts =
+      (thread_counts.empty()
+           ? &one_thread
+           : &static_cast<const std::vector<int>&>(thread_counts));
+  const size_t family_size =
+      std::max<size_t>(args.size(), 0) * instance_thread_counts->size();
+  // The benchmark will be run at least 'family_size' different inputs.
+  // If 'family_size' is very large warn the user.
+  if (family_size > kMaxFamilySize) {
+    GetErrorStream() << "The number of inputs is very large. " << family_name
+                     << " will be repeated at least " << family_size
+                     << " times.\n";
   }
+  Benchmark* this_nc = const_cast<Benchmark*>(this);
+  BenchmarkInfoBase* this_base = this_nc;
+  auto make_instance = [&, this](std::vector<int> const& instance_args,
+                                 int num_threads) {
+    BenchmarkInstance instance;
+    instance.name = family_name;
+    instance.benchmark = this_nc;
+    instance.info = this_base;
+    instance.arg = instance_args;
+    instance.threads = num_threads;
+
+    // Add arguments to instance name
+    size_t arg_i = 0;
+    for (auto const& arg : instance_args) {
+      instance.name += "/";
+
+      if (arg_i < arg_names.size()) {
+        const auto& arg_name = arg_names[arg_i];
+        if (!arg_name.empty()) {
+          instance.name += StringPrintF("%s:", arg_names[arg_i].c_str());
+        }
+      }
+
+      instance.name += StringPrintF("%d", arg);
+      ++arg_i;
+    }
+
+    if (!IsZero(min_time))
+      instance.name += StringPrintF("/min_time:%0.3f", min_time);
+    if (iterations != 0)
+      instance.name += StringPrintF("/iterations:%d", iterations);
+    if (repetitions != 0)
+      instance.name += StringPrintF("/repeats:%d", repetitions);
+
+    if (use_manual_time) {
+      instance.name += "/manual_time";
+    } else if (use_real_time) {
+      instance.name += "/real_time";
+    }
+
+    // Add the number of threads used to the name
+    if (!thread_counts.empty()) {
+      instance.name += StringPrintF("/threads:%d", instance.threads);
+    }
+    instance.last_benchmark_instance = false;
+    return instance;
+  };
+  std::vector<BenchmarkInstance> instance_list(family_size);
+  if (args.empty()) {
+    for (int num_threads : *instance_thread_counts) {
+      instance_list.push_back(make_instance({}, num_threads));
+    }
+  } else {
+    for (auto const& instance_args : args) {
+      for (int num_threads : *instance_thread_counts) {
+        instance_list.push_back(make_instance(instance_args, num_threads));
+      }
+    }
+  }
+  return instance_list;
+}
+
+ErrorCode BenchmarkFamilies::FindBenchmarks(
+    const std::string& spec, std::vector<BenchmarkInstance>* benchmarks) {
+  Regex re;
+  if (ErrorCode EC = re.Init(spec)) return EC;
 
   // Special list of thread counts to use when none are specified
   const std::vector<int> one_thread = {1};
@@ -135,77 +205,16 @@ bool BenchmarkFamilies::FindBenchmarks(
   for (std::unique_ptr<Benchmark>& family : families_) {
     // Family was deleted or benchmark doesn't match
     if (!family) continue;
-
-    if (family->ArgsCnt() == -1) {
-      family->Args({});
-    }
-    const std::vector<int>* thread_counts =
-        (family->thread_counts.empty()
-             ? &one_thread
-             : &static_cast<const std::vector<int>&>(family->thread_counts));
-    const size_t family_size = family->args.size() * thread_counts->size();
-    // The benchmark will be run at least 'family_size' different inputs.
-    // If 'family_size' is very large warn the user.
-    if (family_size > kMaxFamilySize) {
-      Err << "The number of inputs is very large. " << family->family_name
-          << " will be repeated at least " << family_size << " times.\n";
-    }
-    // reserve in the special case the regex ".", since we know the final
-    // family size.
-    if (spec == ".") benchmarks->reserve(family_size);
-
-    for (auto const& args : family->args) {
-      for (int num_threads : *thread_counts) {
-        BenchmarkInstance instance;
-        instance.name = family->family_name;
-        instance.benchmark = family.get();
-        instance.info = family.get();
-        instance.arg = args;
-        instance.threads = num_threads;
-
-        // Add arguments to instance name
-        size_t arg_i = 0;
-        for (auto const& arg : args) {
-          instance.name += "/";
-
-          if (arg_i < family->arg_names.size()) {
-            const auto& arg_name = family->arg_names[arg_i];
-            if (!arg_name.empty()) {
-              instance.name +=
-                  StringPrintF("%s:", family->arg_names[arg_i].c_str());
-            }
-          }
-          
-          instance.name += StringPrintF("%d", arg);
-          ++arg_i;
-        }
-
-        if (!IsZero(family->min_time))
-          instance.name += StringPrintF("/min_time:%0.3f", family->min_time);
-        if (family->iterations != 0)
-          instance.name += StringPrintF("/iterations:%d", family->iterations);
-        if (family->repetitions != 0)
-          instance.name += StringPrintF("/repeats:%d", family->repetitions);
-
-        if (family->use_manual_time) {
-          instance.name += "/manual_time";
-        } else if (family->use_real_time) {
-          instance.name += "/real_time";
-        }
-
-        // Add the number of threads used to the name
-        if (!family->thread_counts.empty()) {
-          instance.name += StringPrintF("/threads:%d", instance.threads);
-        }
-
-        if (re.Match(instance.name)) {
-          instance.last_benchmark_instance = (&args == &family->args.back());
-          benchmarks->push_back(std::move(instance));
-        }
+    bool AddedInstance = false;
+    for (auto const& Instance : family->GenerateInstances()) {
+      if (re.Match(Instance.name)) {
+        AddedInstance = true;
+        benchmarks->push_back(Instance);
       }
     }
+    if (AddedInstance) benchmarks->back().last_benchmark_instance = true;
   }
-  return true;
+  return ErrorCode::Success();
 }
 
 Benchmark* RegisterBenchmarkInternal(Benchmark* bench) {
@@ -215,13 +224,6 @@ Benchmark* RegisterBenchmarkInternal(Benchmark* bench) {
   return bench;
 }
 
-// FIXME: This function is a hack so that benchmark.cc can access
-// `BenchmarkFamilies`
-bool FindBenchmarksInternal(const std::string& re,
-                            std::vector<BenchmarkInstance>* benchmarks,
-                            std::ostream* Err) {
-  return BenchmarkFamilies::GetInstance()->FindBenchmarks(re, benchmarks, Err);
-}
 
 //=============================================================================//
 //                               Benchmark
@@ -472,11 +474,24 @@ void FunctionBenchmark::Run(State& st) { func_(st); }
 
 }  // end namespace internal
 
-BenchmarkInstanceList FindBenchmarks(std::string const& re) {
+BenchmarkInstanceList FindBenchmarks(std::string const& Regex, ErrorCode* EC) {
+  if (EC) EC->clear();
+  const char* const AdjRegex =
+      (Regex.empty() || Regex == "all") ? "." : Regex.c_str();
   BenchmarkInstanceList res;
-  internal::BenchmarkFamilies::GetInstance()->FindBenchmarks(re, &res,
-                                                             &std::cerr);
+  ErrorCode MyEC = internal::BenchmarkFamilies::GetInstance()->FindBenchmarks(
+      AdjRegex, &res);
+  if (MyEC && EC) {
+    *EC = MyEC;
+  } else if (MyEC) {
+    GetErrorStream() << "Failed to initialize regex \"" << Regex
+                     << "\". Error: " << MyEC.message() << std::endl;
+  }
   return res;
+}
+
+BenchmarkInstanceList FindSpecifiedBenchmarks() {
+  return FindBenchmarks(FLAGS_benchmark_filter);
 }
 
 void ClearRegisteredBenchmarks() {

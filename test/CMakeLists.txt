@@ -48,20 +48,7 @@ compile_benchmark_test(benchmark_test)
 add_test(benchmark benchmark_test --benchmark_min_time=0.01)
 
 compile_benchmark_test(filter_test)
-macro(add_filter_test name filter expect)
-  add_test(${name} filter_test --benchmark_min_time=0.01 --benchmark_filter=${filter} ${expect})
-  add_test(${name}_list_only filter_test --benchmark_list_tests --benchmark_filter=${filter} ${expect})
-endmacro(add_filter_test)
-
-add_filter_test(filter_simple "Foo" 3)
-add_filter_test(filter_suffix "BM_.*" 4)
-add_filter_test(filter_regex_all ".*" 5)
-add_filter_test(filter_regex_blank "" 5)
-add_filter_test(filter_regex_none "monkey" 0)
-add_filter_test(filter_regex_wildcard ".*Foo.*" 3)
-add_filter_test(filter_regex_begin "^BM_.*" 4)
-add_filter_test(filter_regex_begin2 "^N" 1)
-add_filter_test(filter_regex_end ".*Ba$" 1)
+add_test(filter_test filter_test)
 
 compile_benchmark_test(options_test)
 add_test(options_benchmarks options_test --benchmark_min_time=0.01)
@@ -106,6 +93,9 @@ add_test(user_counters_test user_counters_test --benchmark_min_time=0.01)
 
 compile_output_test(user_counters_tabular_test)
 add_test(user_counters_tabular_test user_counters_tabular_test --benchmark_counters_tabular=true --benchmark_min_time=0.01)
+
+compile_benchmark_test(new_api_test)
+add_test(new_api_test new_api_test --benchmark_min_time=0.01)
 
 check_cxx_compiler_flag(-std=c++03 BENCHMARK_HAS_CXX03_FLAG)
 if (BENCHMARK_HAS_CXX03_FLAG)
