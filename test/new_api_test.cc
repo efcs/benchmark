@@ -16,6 +16,5 @@ int main(int argc, char **argv) {
   JSON res1 = RunBenchmark(B1);
   JSON res2 = RunBenchmark(B2);
   JSON cmps = CompareResults(res1, res2);
-  ReportResults(res1);
-  ReportResults(res2);
+  ReportResults(cmps);
 }
