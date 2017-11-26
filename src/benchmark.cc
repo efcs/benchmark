@@ -524,7 +524,7 @@ JSON RunBenchmarks(const std::vector<internal::BenchmarkInstance>& benchmarks,
   internal::DisplayContextOnce();
   auto invokeAllCallbacks = [&](CallbackKind K, JSON& J) {
     internal::InvokeCallbacks(K, J);
-    if (ReportConsole) GetGlobalConsoleReporter()(K, J);
+    if (ReportConsole) GetGlobalReporter()(K, J);
   };
   JSON initial_info = internal::GetNameAndStatFieldWidths(benchmarks);
   invokeAllCallbacks(CK_Initial, initial_info);
@@ -546,7 +546,7 @@ JSON RunBenchmark(internal::BenchmarkInstance const& I, bool ReportConsole) {
   internal::DisplayContextOnce();
   auto invokeAllCallbacks = [&](CallbackKind K, JSON& J) {
     internal::InvokeCallbacks(K, J);
-    if (ReportConsole) GetGlobalConsoleReporter()(K, J);
+    if (ReportConsole) GetGlobalReporter()(K, J);
   };
 
   std::vector<internal::BenchmarkInstance> V;

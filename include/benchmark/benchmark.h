@@ -999,6 +999,45 @@ using CallbackList = std::vector<CallbackType>;
 int RegisterCallback(CallbackType CB);
 bool RemoveCallback(int ID);
 void ClearCallbacks();
+
+class ConsoleReporter {
+ public:
+  enum OutputOptions {
+    OO_None = 0,
+    OO_Color = 1,
+    OO_Tabular = 2,
+    OO_ColorTabular = OO_Color | OO_Tabular,
+    OO_Defaults = OO_ColorTabular
+  };
+
+  static ConsoleReporter& Get();
+
+  void SetOutputOptions(OutputOptions opts) { output_options_ = opts; }
+
+  OutputOptions GetOutputOptions() const { return output_options_; }
+
+  void Report(JSON const&);
+  void operator()(CallbackKind K, JSON const& J);
+
+ private:
+  void Initialize(const JSON& init_info);
+  void ReportResults(const JSON& result);
+  void PrintRunData(const JSON& report);
+  void PrintHeader(const JSON& report);
+
+ private:
+  OutputOptions output_options_;
+  size_t name_field_width_;
+  UserCounters prev_counters_;
+  bool printed_header_;
+
+ private:
+  ConsoleReporter();
+  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(ConsoleReporter);
+};
+
+ConsoleReporter& GetGlobalReporter();
+
 #endif  // BENCHMARK_HAS_CXX11
 
 namespace internal {

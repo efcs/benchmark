@@ -13,6 +13,8 @@ int main(int argc, char **argv) {
   };
   auto *B1 = RegisterBenchmark("bench1", BMF);
   auto *B2 = RegisterBenchmark("bench2", BMF);
+  ((void)B1);
+  ((void)B2);
   //ReportResults(
   //    CompareResults(RunBenchmark(B1), RunBenchmark(B2))
   //);
