@@ -334,7 +334,8 @@ inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
 // FIXME Add ClobberMemory() for non-gnu and non-msvc compilers
 #endif
 
-
+void ClearCache(const volatile void*, const volatile void*);
+void ClearCache(const volatile void*);
 
 // This class is used for user-defined counters.
 class Counter {

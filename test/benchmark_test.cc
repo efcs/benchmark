@@ -11,6 +11,7 @@
 #include <list>
 #include <map>
 #include <mutex>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -240,5 +241,93 @@ static void BM_DenseThreadRanges(benchmark::State& st) {
 BENCHMARK(BM_DenseThreadRanges)->Arg(1)->DenseThreadRange(1, 3);
 BENCHMARK(BM_DenseThreadRanges)->Arg(2)->DenseThreadRange(1, 4, 2);
 BENCHMARK(BM_DenseThreadRanges)->Arg(3)->DenseThreadRange(5, 14, 3);
+
+inline std::default_random_engine& getRandomEngine() {
+  static std::default_random_engine RandEngine(std::random_device{}());
+  return RandEngine;
+}
+
+template <class T>
+using Lim = std::numeric_limits<T>;
+
+template <class IntT>
+inline IntT getRandomInteger(IntT a = 0, IntT b = Lim<IntT>::max()) {
+  std::uniform_int_distribution<IntT> dist(a, b);
+  return dist(getRandomEngine());
+}
+
+template <class IntT>
+std::vector<IntT> getRandomIntegerInputs(size_t N, IntT a = 0,
+                                         IntT b = Lim<IntT>::max()) {
+  std::uniform_int_distribution<IntT> dist(a, b);
+  std::vector<IntT> inputs;
+  for (size_t i = 0; i < N; ++i) {
+    inputs.push_back(dist(getRandomEngine()));
+  }
+  return inputs;
+}
+
+static void BM_CacheBench(benchmark::State& S) {
+  int bytes = 1 << S.range(0);
+  int count = (bytes / sizeof(int)) / 2;
+  std::vector<int> v = getRandomIntegerInputs<int>(count);
+  std::vector<int> indices = getRandomIntegerInputs<int>(count, 0, count);
+  benchmark::DoNotOptimize(v.data());
+  benchmark::DoNotOptimize(indices.data());
+  for (auto _ : S) {
+    long sum = 0;
+    for (int i : indices) {
+      sum += v[i];
+    }
+    benchmark::DoNotOptimize(sum);
+  }
+  S.SetBytesProcessed(long(S.iterations()) * long(bytes));
+  S.SetLabel(std::to_string(bytes / 1024) + "kb");
+}
+BENCHMARK(BM_CacheBench)->DenseRange(13, 26)->ReportAggregatesOnly(true);
+
+static void BM_ClearCacheBench(benchmark::State& S) {
+  int bytes = 1 << S.range(0);
+  int count = (bytes / sizeof(int)) / 2;
+  std::vector<int> v = getRandomIntegerInputs<int>(count);
+  std::vector<int> indices = getRandomIntegerInputs<int>(count, 0, count);
+  benchmark::DoNotOptimize(v.data());
+  benchmark::DoNotOptimize(indices.data());
+  for (auto _ : S) {
+    long sum = 0;
+    for (int i : indices) {
+      benchmark::ClearCache(&v[i]);
+      sum += v[i];
+    }
+    benchmark::DoNotOptimize(sum);
+  }
+  S.SetBytesProcessed(long(S.iterations()) * long(bytes));
+  S.SetLabel(std::to_string(bytes / 1024) + "kb");
+}
+BENCHMARK(BM_ClearCacheBench)->DenseRange(13, 26)->ReportAggregatesOnly(true);
+
+static void BM_ClearCacheNoopBench(benchmark::State& S) {
+  int bytes = 1 << S.range(0);
+  int count = (bytes / sizeof(int)) / 2;
+  std::vector<int> v = getRandomIntegerInputs<int>(count);
+  std::vector<int> v2 = v;
+  std::vector<int> indices = getRandomIntegerInputs<int>(count, 0, count);
+  // benchmark::DoNotOptimize(v.data());
+  benchmark::DoNotOptimize(indices.data());
+  int* x = new int(42);
+  for (auto _ : S) {
+    long sum = 0;
+    for (int i : indices) {
+      benchmark::ClearCache(x);
+      sum += v[i];
+    }
+    benchmark::DoNotOptimize(sum);
+  }
+  S.SetBytesProcessed(long(S.iterations()) * long(bytes));
+  S.SetLabel(std::to_string(bytes / 1024) + "kb");
+}
+BENCHMARK(BM_ClearCacheNoopBench)
+    ->DenseRange(13, 26)
+    ->ReportAggregatesOnly(true);
 
 BENCHMARK_MAIN()

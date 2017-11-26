@@ -719,4 +719,34 @@ bool ReportUnrecognizedArguments(int argc, char** argv) {
   return argc > 1;
 }
 
+static void ClearCacheImp(char* B, char* const E) {
+#if defined(__i386__) || defined(__x86_64__) || defined(__amd64__)
+  __builtin_ia32_clflush(B);
+  std::uintptr_t BVal = reinterpret_cast<std::uintptr_t>(B);
+  int NumOffset = BVal % 64;
+  if (NumOffset == 0) NumOffset = 64;
+  B += NumOffset;
+  while (reinterpret_cast<uintptr_t>(B) <
+         (reinterpret_cast<uintptr_t>(E) - 64)) {
+    __builtin_ia32_clflush(B);
+    B += 64;
+  }
+  __builtin_ia32_mfence();
+#elif defined(__ARM_ARCH)
+  __clear_cache(B, E);
+#else
+#error ClearCache has not been implemented for this CPU
+#endif
+}
+
+void ClearCache(const volatile void* B, const volatile void* E) {
+  ClearCacheImp(const_cast<char*>(static_cast<const volatile char*>(B)),
+                const_cast<char*>(static_cast<const volatile char*>(E)));
+}
+
+void ClearCache(const volatile void* B) {
+  ClearCacheImp(const_cast<char*>(static_cast<const volatile char*>(B)),
+                const_cast<char*>(static_cast<const volatile char*>(B)));
+}
+
 }  // end namespace benchmark
