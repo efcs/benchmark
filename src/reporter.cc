@@ -79,7 +79,8 @@ void PrintBasicContext(std::ostream* out, JSON const& context) {
   Out << LocalDateTimeString() << "\n";
 
   JSON info = context.at("cpu_info");
-  Out << "Run on (" << info.get_at<int>("num_cpus") << " X "
+  int num_cpus = info.get_at<int>("num_cpus");
+  Out << "Run on (" << num_cpus << " X "
       << (info.get_at<double>("cycles_per_second") / 1000000.0) << " MHz CPU "
       << ((info.get_at<int>("num_cpus") > 1) ? "s" : "") << ")\n";
   std::vector<CPUInfo::CacheInfo> caches = info.at("caches");
@@ -89,7 +90,7 @@ void PrintBasicContext(std::ostream* out, JSON const& context) {
       Out << "  L" << CInfo.level << " " << CInfo.type << " "
           << (CInfo.size / 1000) << "K";
       if (CInfo.num_sharing != 0)
-        Out << " (x" << (info.num_cpus / CInfo.num_sharing) << ")";
+        Out << " (x" << (num_cpus / CInfo.num_sharing) << ")";
       Out << "\n";
     }
   }

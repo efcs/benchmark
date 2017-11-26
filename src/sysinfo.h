@@ -11,6 +11,7 @@ struct CPUInfo {
     std::string type;
     int level;
     int size;
+    int num_sharing;
   };
 
   int num_cpus;
