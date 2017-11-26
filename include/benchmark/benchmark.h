@@ -1284,5 +1284,4 @@ class Fixture : public internal::Benchmark {
     ::benchmark::RunSpecifiedBenchmarks(); \
   }
 
-
 #endif  // BENCHMARK_BENCHMARK_H_

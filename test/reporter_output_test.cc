@@ -14,6 +14,31 @@ ADD_CASES(TC_ConsoleOut,
            {"^Benchmark %s Time %s CPU %s Iterations$", MR_Next},
            {"^[-]+$", MR_Next}});
 
+static int AddContextCases() {
+  using namespace benchmark;
+  AddCases(TC_ConsoleErr,
+           {
+               {"%int[-/]%int[-/]%int %int:%int:%int$", MR_Default},
+               {"Run on \\(%int X %float MHz CPU s\\)", MR_Next},
+           });
+  JSON Context = GetContext();
+  JSON Caches = Context.at("caches");
+  size_t CachesSize = Caches.size();
+  if (CachesSize != 0) {
+    AddCases(TC_ConsoleErr, {{"CPU Caches:$", MR_Next}});
+  }
+  for (size_t I = 0; I < CachesSize; ++I) {
+    std::string num_caches_str =
+        Caches[I].num_sharing != 0 ? " \\(x%int\\)$" : "$";
+    AddCases(
+        TC_ConsoleErr,
+        {{"L%int (Data|Instruction|Unified) %intK" + num_caches_str, MR_Next}});
+  }
+  return 0;
+}
+int dummy_register = AddContextCases();
+
+
 // ========================================================================= //
 // ------------------------ Testing Basic Output --------------------------- //
 // ========================================================================= //
