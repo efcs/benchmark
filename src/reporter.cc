@@ -241,9 +241,9 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
     printer(Out, COLOR_DEFAULT, " %*s", 18, items.c_str());
   }
 
-  if (result.count("label") != 0) {
-    printer(Out, COLOR_DEFAULT, " %s",
-            result.get_at<std::string>("label").c_str());
+  std::string label = result.value("label", std::string{});
+  if (!label.empty()) {
+    printer(Out, COLOR_DEFAULT, " %s", label.c_str());
   }
 }
 

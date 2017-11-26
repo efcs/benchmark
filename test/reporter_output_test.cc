@@ -22,14 +22,15 @@ static int AddContextCases() {
                {"Run on \\(%int X %float MHz CPU s\\)", MR_Next},
            });
   JSON Context = GetContext();
-  JSON Caches = Context.at("caches");
+  JSON CPUInfo = Context.at("cpu_info");
+  JSON Caches = CPUInfo.at("caches");
   size_t CachesSize = Caches.size();
   if (CachesSize != 0) {
     AddCases(TC_ConsoleErr, {{"CPU Caches:$", MR_Next}});
   }
   for (size_t I = 0; I < CachesSize; ++I) {
     std::string num_caches_str =
-        Caches[I].num_sharing != 0 ? " \\(x%int\\)$" : "$";
+        Caches[I].at("num_sharing") != 0 ? " \\(x%int\\)$" : "$";
     AddCases(
         TC_ConsoleErr,
         {{"L%int (Data|Instruction|Unified) %intK" + num_caches_str, MR_Next}});

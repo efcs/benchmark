@@ -522,7 +522,7 @@ void to_json(JSON& J, CPUInfo const& D) {
   J = Res;
 }
 void to_json(JSON& J, const CPUInfo::CacheInfo& CI) {
-  JSON Res{{"type", CI.type}, {"level", CI.level}, {"size", CI.size}};
+  JSON Res{{"type", CI.type}, {"level", CI.level}, {"size", CI.size}, {"num_sharing", CI.num_sharing}};
   J = Res;
 }
 
@@ -530,6 +530,7 @@ void from_json(JSON const& J, CPUInfo::CacheInfo& CI) {
   CI.type = J.at("type");
   CI.level = J.at("level");
   CI.size = J.at("size");
+  CI.num_sharing = J.at("num_sharing");
 }
 
 }  // end namespace benchmark
