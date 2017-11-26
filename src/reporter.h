@@ -7,7 +7,7 @@ namespace benchmark {
 
 void PrintBasicContext(std::ostream* out, JSON const& context);
 
-explicit ConsoleReporter::ConsoleReporter()
+ConsoleReporter::ConsoleReporter()
     : output_options_(OO_Defaults),
       name_field_width_(0),
       prev_counters_(),
@@ -26,14 +26,14 @@ void ConsoleReporter::operator()(CallbackKind K, JSON const& J) {
     case CK_Final:
       break;  // nothing to do
   }
-  }
+}
 
-  ConsoleReporter& ConsoleReporter::Get() {
-    static ConsoleReporter* reporter = new ConsoleReporter();
-    return *reporter;
-  }
+ConsoleReporter& ConsoleReporter::Get() {
+  static ConsoleReporter* reporter = new ConsoleReporter();
+  return *reporter;
+}
 
-  ConsoleReporter& GetGlobalReporter() { return ConsoleReporter::Get(); }
+ConsoleReporter& GetGlobalReporter() { return ConsoleReporter::Get(); }
 
 }  // namespace benchmark
 
