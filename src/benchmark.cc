@@ -92,7 +92,6 @@ class ThreadManager {
     std::string report_label_;
     std::string error_message_;
     bool has_error_ = false;
-    UserCounters counters;
     JSON user_data = JSON::object();
   };
   GUARDED_BY(GetBenchmarkMutex()) Result results;
@@ -260,10 +259,6 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
       }
     }
     json_report["user_data"] = user_data;
-    auto counters_cp = results.counters;
-    internal::Finish(&counters_cp, seconds, b.threads);
-    JSON counters = counters_cp;
-    json_report["counters"] = counters;
   }
   return json_report;
 }
@@ -285,8 +280,9 @@ void RunInThread(const benchmark::internal::BenchmarkInstance* b, size_t iters,
     results.cpu_time_used += timer.cpu_time_used();
     results.real_time_used += timer.real_time_used();
     results.manual_time_used += timer.manual_time_used();
+    JSON Counters = st.counters;
     JoinUserData(results.user_data, st.GetJSON());
-    internal::Increment(&results.counters, st.counters);
+    JoinUserData(results.user_data, Counters);
   }
   manager->NotifyThreadComplete();
 }
@@ -491,11 +487,10 @@ void State::FinishKeepRunning() {
 }
 
 void State::SetCounter(std::string const& Key, Counter C) {
-  GetJSON()[Key] = C;
+  GetJSONRef()[Key] = C;
 }
 
 Counter State::GetCounter(std::string const& Key) const {
-  if (GetJSON().count(Key) == 0) return Counter();
   Counter C = GetJSON().at(Key);
   return C;
 }

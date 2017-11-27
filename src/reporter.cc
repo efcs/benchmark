@@ -159,8 +159,14 @@ void ConsoleReporter::ReportResults(JSON const& result) {
     // --- or if the format is tabular and this run
     //     has different fields from the prev header
     UserCounters counters;
-    if (output_options_ & OO_Tabular && run.count("counters") != 0) {
-      counters = run.at("counters").get<UserCounters>();
+    if (output_options_ & OO_Tabular && run.count("user_data") != 0) {
+      auto data = run.at("user_data");
+      for (auto It = data.begin(); It != data.end(); ++It) {
+        if (It.value().value("kind", "") != "counter") continue;
+        if (It.key() == "bytes_per_second" || It.key() == "items_per_second")
+          continue;
+        counters[It.key()] = It.value().get<Counter>();
+      }
       print_header |= !internal::SameNames(counters, prev_counters_);
     }
     if (print_header) {
@@ -207,27 +213,26 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
     printer(Out, COLOR_CYAN, "%10lld", result.get_at<int64_t>("iterations"));
   }
 
-  if (!result.at("counters").empty()) {
-    UserCounters counters = result.at("counters");
-    for (auto& c : counters) {
-      auto const& s = HumanReadableNumber(c.second.value, 1000);
+  if (result.count("user_data") != 0) {
+    JSON ucounters = result.at("user_data");
+    for (auto It = ucounters.begin(); It != ucounters.end(); ++It) {
+      std::string Key = It.key();
+      if (Key == "items_per_second" || Key == "bytes_per_second") continue;
+      if (It.value().value("kind", "") != "counter") continue;
+      Counter C = It.value();
+
+      auto const& s = HumanReadableNumber(C.value, 1000);
       if (output_options & ConsoleReporter::OO_Tabular) {
-        if (c.second.flags & Counter::kIsRate) {
+        if (C.flags & Counter::kIsRate) {
           printer(Out, COLOR_DEFAULT, " %8s/s", s.c_str());
         } else {
           printer(Out, COLOR_DEFAULT, " %10s", s.c_str());
         }
       } else {
-        const char* unit = (c.second.flags & Counter::kIsRate) ? "/s" : "";
-        printer(Out, COLOR_DEFAULT, " %s=%s%s", c.first.c_str(), s.c_str(),
-                unit);
+        const char* unit = (C.flags & Counter::kIsRate) ? "/s" : "";
+        printer(Out, COLOR_DEFAULT, " %s=%s%s", Key.c_str(), s.c_str(), unit);
       }
     }
-  }
-
-  JSON ucounters;
-  if (result.count("user_data") != 0) {
-    ucounters = result.at("user_data");
     if (ucounters.count("bytes_per_second") != 0) {
       Counter C = ucounters.at("bytes_per_second");
       std::string rate = StrCat(" ", HumanReadableNumber(C.value), "B/s");

@@ -665,11 +665,26 @@ class State {
   }
 
 #ifdef BENCHMARK_HAS_CXX11
-  JSON& GetJSON() { return json_output_.get(); }
-  const JSON& GetJSON() const { return json_output_.get(); }
+ private:
+  JSON& GetJSONRef() { return json_output_.get(); }
 
-  void SetData(std::string const& Key, JSON Value) { GetJSON()[Key] = Value; }
-  JSON GetData(std::string const& Key) const { return GetJSON().at(Key); }
+ public:
+  const JSON& GetJSON() const { return json_output_.get(); }
+  void WithData(JSON Data) {
+    for (auto It = Data.begin(); It != Data.end(); ++It)
+      GetJSONRef()[It.key()] = It.value();
+  }
+
+  JSON::reference operator[](std::string const& Key) {
+    return GetJSONRef()[Key];
+  }
+
+  void SetData(std::string const& Key, JSON Value) {
+    GetJSONRef()[Key] = Value;
+  }
+  JSON::const_reference GetData(std::string const& Key) const {
+    return GetJSON().at(Key);
+  }
 
   JSON const& GetInputData() const { return json_input_.get(); }
 #endif
