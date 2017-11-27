@@ -1,6 +1,7 @@
 #define BUILDING_BENCHMARK_COMMANDLINE_CC
 #include "benchmark_commandline.h"
 #include "benchmark/benchmark.h"
+#include "colorprint.h"
 #include "log.h"
 
 namespace benchmark {
@@ -257,9 +258,30 @@ int InitializeStreams() {
 
 }  // end namespace internal
 
+static ConsoleReporter::OutputOptions GetCommandLineOutputOptions(
+    bool force_no_color) {
+  int output_opts = ConsoleReporter::OO_Defaults;
+  if ((FLAGS_benchmark_color == "auto" && IsColorTerminal()) ||
+      internal::IsTruthyFlagValue(FLAGS_benchmark_color)) {
+    output_opts |= ConsoleReporter::OO_Color;
+  } else {
+    output_opts &= ~ConsoleReporter::OO_Color;
+  }
+  if (force_no_color) {
+    output_opts &= ~ConsoleReporter::OO_Color;
+  }
+  if (FLAGS_benchmark_counters_tabular) {
+    output_opts |= ConsoleReporter::OO_Tabular;
+  } else {
+    output_opts &= ~ConsoleReporter::OO_Tabular;
+  }
+  return static_cast<ConsoleReporter::OutputOptions>(output_opts);
+}
+
 void Initialize(int* argc, char** argv) {
   internal::ParseCommandLineFlags(argc, argv);
   internal::LogLevel() = FLAGS_v;
+  GetGlobalReporter().SetOutputOptions(GetCommandLineOutputOptions(false));
 }
 
 bool ReportUnrecognizedArguments(int argc, char** argv) {

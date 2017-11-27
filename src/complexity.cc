@@ -162,7 +162,7 @@ JSON ComputeBigO(const internal::BenchmarkInstance& instance,
   for (JSON const& Run : reports) {
     // CHECK_GT(run.complexity_n, 0) << "Did you forget to call
     // SetComplexityN?";
-    n.push_back(Run.at("complexity_n").get<int>());
+    n.push_back(Run.at("user_counters").at("complexity_n").get<int>());
     auto iters = Run.at("iterations").get<int64_t>();
     real_time.push_back(Run.at("real_accumulated_time").get<double>() / iters);
     cpu_time.push_back(Run.at("cpu_accumulated_time").get<double>() / iters);

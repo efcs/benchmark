@@ -134,13 +134,14 @@ std::vector<BenchmarkInstance> Benchmark::GenerateInstances() const {
   Benchmark* this_nc = const_cast<Benchmark*>(this);
   BenchmarkInfoBase* this_base = this_nc;
   auto make_instance = [&, this](std::vector<int> const& instance_args,
-                                 int num_threads) {
+                                 int num_threads, JSON const& data) {
     BenchmarkInstance instance;
     instance.name = family_name;
     instance.benchmark = this_nc;
     instance.info = this_base;
     instance.arg = instance_args;
     instance.threads = num_threads;
+    instance.input_data = data;
 
     // Add arguments to instance name
     size_t arg_i = 0;
@@ -156,6 +157,20 @@ std::vector<BenchmarkInstance> Benchmark::GenerateInstances() const {
 
       instance.name += StringPrintF("%d", arg);
       ++arg_i;
+    }
+
+    if (!data.is_null() && data.count("name")) {
+      instance.name += "/input:";
+      instance.name += data.at("name");
+    } else if (!data.is_null()) {
+      instance.name += "/with_inputs";
+      CHECK(data.is_object());
+      for (auto It = data.begin(); It != data.end(); ++It) {
+        std::string Key = It.key();
+        JSON Value = It.value();
+        CHECK(Value.is_primitive());
+        instance.name += "/" + Key + ":" + It.value().dump();
+      }
     }
 
     if (!IsZero(min_time))
@@ -179,17 +194,15 @@ std::vector<BenchmarkInstance> Benchmark::GenerateInstances() const {
     return instance;
   };
   std::vector<BenchmarkInstance> instance_list(family_size);
-  if (args.empty()) {
-    for (int num_threads : *instance_thread_counts) {
-      instance_list.push_back(make_instance({}, num_threads));
-    }
-  } else {
-    for (auto const& instance_args : args) {
-      for (int num_threads : *instance_thread_counts) {
-        instance_list.push_back(make_instance(instance_args, num_threads));
-      }
-    }
-  }
+  const std::vector<std::vector<int>> default_args(1);
+  std::vector<JSONPointer> default_inputs;
+  default_inputs.emplace_back();
+
+  for (auto& A : args.empty() ? default_args : args)
+    for (auto& J : user_data.empty() ? default_inputs : user_data)
+      for (auto NT : *instance_thread_counts)
+        instance_list.push_back(make_instance(A, NT, J.get()));
+
   return instance_list;
 }
 
@@ -271,6 +284,11 @@ void Benchmark::AddRange(std::vector<int>* dst, int lo, int hi, int mult) {
   if (hi != lo) {
     dst->push_back(hi);
   }
+}
+
+Benchmark* Benchmark::WithData(JSON Data) {
+  user_data.emplace_back(std::move(Data));
+  return this;
 }
 
 Benchmark* Benchmark::Arg(int x) {

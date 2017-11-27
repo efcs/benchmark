@@ -207,7 +207,7 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
     printer(Out, COLOR_CYAN, "%10lld", result.get_at<int64_t>("iterations"));
   }
 
-  if (result.at("counters") != 0) {
+  if (!result.at("counters").empty()) {
     UserCounters counters = result.at("counters");
     for (auto& c : counters) {
       auto const& s = HumanReadableNumber(c.second.value, 1000);
@@ -225,20 +225,19 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
     }
   }
 
-  // Format bytes per second
-  if (result.count("bytes_per_second") != 0) {
-    std::string rate = StrCat(
-        " ", HumanReadableNumber(result.get_at<double>("bytes_per_second")),
-        "B/s");
-    printer(Out, COLOR_DEFAULT, " %*s", 13, rate.c_str());
-  }
-
-  // Format items per second
-  if (result.count("items_per_second") != 0) {
-    std::string items = StrCat(
-        " ", HumanReadableNumber(result.get_at<double>("items_per_second")),
-        " items/s");
-    printer(Out, COLOR_DEFAULT, " %*s", 18, items.c_str());
+  JSON ucounters;
+  if (result.count("user_data") != 0) {
+    ucounters = result.at("user_data");
+    if (ucounters.count("bytes_per_second") != 0) {
+      Counter C = ucounters.at("bytes_per_second");
+      std::string rate = StrCat(" ", HumanReadableNumber(C.value), "B/s");
+      printer(Out, COLOR_DEFAULT, " %*s", 13, rate.c_str());
+    }
+    if (ucounters.count("items_per_second") != 0) {
+      Counter C = ucounters.at("items_per_second");
+      std::string items = StrCat(" ", HumanReadableNumber(C.value), " items/s");
+      printer(Out, COLOR_DEFAULT, " %*s", 18, items.c_str());
+    }
   }
 
   std::string label = result.value("label", std::string{});
@@ -296,38 +295,41 @@ void ConsoleReporter::PrintRunData(const JSON& result) {
   printer(Out, COLOR_DEFAULT, "\n");
 }
 
-ConsoleReporter::OutputOptions ConsoleReporter::GetCommandLineOutputOptions(
-    bool force_no_color) {
-  int output_opts = ConsoleReporter::OO_Defaults;
-  if ((FLAGS_benchmark_color == "auto" && IsColorTerminal()) ||
-      internal::IsTruthyFlagValue(FLAGS_benchmark_color)) {
-    output_opts |= ConsoleReporter::OO_Color;
-  } else {
-    output_opts &= ~ConsoleReporter::OO_Color;
-  }
-  if (force_no_color) {
-    output_opts &= ~ConsoleReporter::OO_Color;
-  }
-  if (FLAGS_benchmark_counters_tabular) {
-    output_opts |= ConsoleReporter::OO_Tabular;
-  } else {
-    output_opts &= ~ConsoleReporter::OO_Tabular;
-  }
-  return static_cast<ConsoleReporter::OutputOptions>(output_opts);
-}
-
-ConsoleReporter& GetGlobalConsoleReporter() {
-  static ConsoleReporter CR = ConsoleReporter::GetCommandLineReporter();
-  return CR;
-}
-
 void ReportResults(JSON const& J) {
   if (J.is_array()) {
     assert(J.size() == 1);
-    GetGlobalConsoleReporter()(CK_Report, J[0]);
+    GetGlobalReporter()(CK_Report, J[0]);
   } else {
-    GetGlobalConsoleReporter()(CK_Report, J);
+    GetGlobalReporter()(CK_Report, J);
   }
 }
+
+ConsoleReporter::ConsoleReporter()
+    : output_options_(OO_Defaults),
+      name_field_width_(0),
+      prev_counters_(),
+      printed_header_(false) {}
+
+void ConsoleReporter::operator()(CallbackKind K, JSON const& J) {
+  switch (K) {
+    case CK_Initial:
+      return Initialize(J);
+    case CK_Context:
+      PrintBasicContext(&GetErrorStream(), J);
+      std::flush(GetErrorStream());
+      break;
+    case CK_Report:
+      return ReportResults(J);
+    case CK_Final:
+      break;  // nothing to do
+  }
+}
+
+ConsoleReporter& ConsoleReporter::Get() {
+  static ConsoleReporter* reporter = new ConsoleReporter();
+  return *reporter;
+}
+
+ConsoleReporter& GetGlobalReporter() { return ConsoleReporter::Get(); }
 
 }  // end namespace benchmark

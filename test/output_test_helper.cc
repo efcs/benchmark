@@ -272,6 +272,7 @@ int SetSubstitutions(
 void RunOutputTests(int argc, char* argv[]) {
   using internal::GetTestCaseList;
   benchmark::Initialize(&argc, argv);
+  benchmark::GetGlobalReporter().EnableColor(false);
 
   std::stringstream* out_stream = new std::stringstream();
   std::stringstream* err_stream = new std::stringstream();

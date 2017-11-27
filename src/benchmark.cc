@@ -89,13 +89,11 @@ class ThreadManager {
     double real_time_used = 0;
     double cpu_time_used = 0;
     double manual_time_used = 0;
-    int64_t bytes_processed = 0;
-    int64_t items_processed = 0;
-    int complexity_n = 0;
     std::string report_label_;
     std::string error_message_;
     bool has_error_ = false;
     UserCounters counters;
+    JSON user_data = JSON::object();
   };
   GUARDED_BY(GetBenchmarkMutex()) Result results;
 
@@ -201,6 +199,23 @@ void ClearCallbacks() { GetCallbackList()->clear(); }
 
 namespace {
 
+static void JoinUserData(JSON& Dest, JSON const& New) {
+  if (New.is_null()) return;
+  CHECK(New.is_object());
+  for (auto It = New.begin(); It != New.end(); ++It) {
+    std::string Key = It.key();
+    JSON Value = It.value();
+    if (Dest.count(Key) == 0) {
+      Dest[Key] = Value;
+    } else if (New.value("kind", std::string{}) == "counter") {
+      Counter X = Dest.at(Key);
+      Counter Y = Value;
+      X.value += Y.value;
+      Dest[Key] = X;
+    }
+  }
+}
+
 JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
                      const internal::ThreadManager::Result& results,
                      size_t iters, double seconds) {
@@ -209,11 +224,10 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
   // Report the total iterations across all threads.
   int64_t iterations = static_cast<int64_t>(iters) * b.threads;
 
-  JSON json_report = {
-      {"name", b.name},
-      {"kind", results.has_error_ ? "error" : "normal"},
-      {"iterations", static_cast<int64_t>(iters) * b.threads},
-  };
+  JSON json_report = {{"name", b.name},
+                      {"kind", results.has_error_ ? "error" : "normal"},
+                      {"iterations", static_cast<int64_t>(iters) * b.threads},
+                      {"user_data", JSON::object()}};
   if (!results.report_label_.empty())
     json_report["label"] = results.report_label_;
   if (results.has_error_) json_report["error_message"] = results.error_message_;
@@ -221,13 +235,6 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
   if (!results.has_error_) {
     json_report["time_unit"] = GetTimeUnitString(b.info->time_unit);
     auto UnitMul = GetTimeUnitMultiplier(b.info->time_unit);
-
-    if (results.bytes_processed > 0 && seconds > 0.0) {
-      json_report["bytes_per_second"] = (results.bytes_processed / seconds);
-    }
-    if (results.items_processed > 0 && seconds > 0.0) {
-      json_report["items_per_second"] = (results.items_processed / seconds);
-    }
 
     double real_time = b.info->use_manual_time ? results.manual_time_used
                                                : results.real_time_used;
@@ -240,14 +247,21 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
     json_report["cpu_iteration_time"] =
         cpu_time / static_cast<double>(iterations);
 
-    if (results.complexity_n != 0)
-      json_report["complexity_n"] = results.complexity_n;
     if (b.info->complexity != 0) json_report["complexity"] = b.info->complexity;
 
     // report.statistics = b.statistics;
+
+    JSON user_data = results.user_data;
+    for (auto It = user_data.begin(); It != user_data.end(); ++It) {
+      JSON::reference J = It.value();
+      if (J.value("kind", std::string{}) == "counter") {
+        Counter C = J;
+        J.at("value") = internal::Finish(C, seconds, b.threads);
+      }
+    }
+    json_report["user_data"] = user_data;
     auto counters_cp = results.counters;
     internal::Finish(&counters_cp, seconds, b.threads);
-
     JSON counters = counters_cp;
     json_report["counters"] = counters;
   }
@@ -259,19 +273,19 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
 void RunInThread(const benchmark::internal::BenchmarkInstance* b, size_t iters,
                  int thread_id, internal::ThreadManager* manager) {
   internal::ThreadTimer timer;
-  State st(iters, b->arg, thread_id, b->threads, &timer, manager);
+  State st(iters, b->arg, thread_id, b->threads, &timer, manager,
+           JSONPointer(b->input_data));
   b->benchmark->Run(st);
   CHECK(st.iterations() == st.max_iterations)
       << "Benchmark returned before State::KeepRunning() returned false!";
   {
     MutexLock l(manager->GetBenchmarkMutex());
+    JSON res = st.GetJSON();
     internal::ThreadManager::Result& results = manager->results;
     results.cpu_time_used += timer.cpu_time_used();
     results.real_time_used += timer.real_time_used();
     results.manual_time_used += timer.manual_time_used();
-    results.bytes_processed += st.bytes_processed();
-    results.items_processed += st.items_processed();
-    results.complexity_n += st.complexity_length_n();
+    JoinUserData(results.user_data, st.GetJSON());
     internal::Increment(&results.counters, st.counters);
   }
   manager->NotifyThreadComplete();
@@ -398,25 +412,27 @@ JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
 
 }  // namespace
 
+JSONPointer::JSONPointer() : ptr_(new PIMPL()) {}
+JSONPointer::JSONPointer(JSON J) : ptr_(new PIMPL{std::move(J)}) {}
+JSONPointer::~JSONPointer() { delete ptr_; }
 }  // namespace internal
 
 State::State(size_t max_iters, const std::vector<int>& ranges, int thread_i,
              int n_threads, internal::ThreadTimer* timer,
-             internal::ThreadManager* manager)
+             internal::ThreadManager* manager, internal::JSONPointer json_input)
     : started_(false),
       finished_(false),
       total_iterations_(max_iters + 1),
       range_(ranges),
-      bytes_processed_(0),
-      items_processed_(0),
-      complexity_n_(0),
       error_occurred_(false),
       counters(),
       thread_index(thread_i),
       threads(n_threads),
       max_iterations(max_iters),
       timer_(timer),
-      manager_(manager) {
+      manager_(manager),
+      json_output_(),
+      json_input_(std::move(json_input)) {
   CHECK(max_iterations != 0) << "At least one iteration must be run";
   CHECK(total_iterations_ != 0) << "max iterations wrapped around";
   CHECK_LT(thread_index, threads) << "thread_index must be less than threads";
@@ -472,6 +488,16 @@ void State::FinishKeepRunning() {
   total_iterations_ = 1;
   finished_ = true;
   manager_->StartStopBarrier();
+}
+
+void State::SetCounter(std::string const& Key, Counter C) {
+  GetJSON()[Key] = C;
+}
+
+Counter State::GetCounter(std::string const& Key) const {
+  if (GetJSON().count(Key) == 0) return Counter();
+  Counter C = GetJSON().at(Key);
+  return C;
 }
 
 namespace internal {

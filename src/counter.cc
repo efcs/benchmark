@@ -13,13 +13,15 @@
 // limitations under the License.
 
 #include "counter.h"
+#include "check.h"
 
 namespace benchmark {
 
 void to_json(JSON& j, const Counter& C) {
-  j = JSON{{"value", C.value}, {"flags", C.flags}};
+  j = JSON{{"value", C.value}, {"flags", C.flags}, {"kind", "counter"}};
 }
 void from_json(const JSON& j, Counter& C) {
+  CHECK_EQ(j.value("kind", ""), "counter");
   C.value = j.at("value");
   C.flags = static_cast<Counter::Flags>(j.get_at<Counter::Flags>("flags"));
 }

@@ -370,8 +370,6 @@ inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
 // FIXME Add ClobberMemory() for non-gnu and non-msvc compilers
 #endif
 
-
-
 // This class is used for user-defined counters.
 class Counter {
 public:
@@ -469,6 +467,45 @@ enum ReportMode
   RM_Default,      // The mode is user-specified as default.
   RM_ReportAggregatesOnly
 };
+
+class JSONPointer {
+ public:
+  JSONPointer();
+  ~JSONPointer();
+#ifdef BENCHMARK_HAS_CXX11
+  explicit JSONPointer(JSON J);
+  inline JSONPointer(JSONPointer&& JP) noexcept;
+  inline JSONPointer& operator=(JSONPointer&& JP) noexcept;
+  inline JSON& get() const;
+  inline JSON* operator->() const;
+  JSON& operator*() const { return get(); }
+#endif
+ private:
+  struct PIMPL;
+  PIMPL* ptr_;
+#ifndef BENCHMARK_HAS_CXX11
+  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(JSONPointer);
+#endif
+};
+
+#ifdef BENCHMARK_HAS_CXX11
+struct JSONPointer::PIMPL {
+  JSON value;
+};
+inline JSONPointer::JSONPointer(JSONPointer&& JP) noexcept : ptr_(JP.ptr_) {
+  JP.ptr_ = nullptr;
+}
+inline JSONPointer& JSONPointer::operator=(JSONPointer&& JP) noexcept {
+  PIMPL* tmp = ptr_;
+  ptr_ = JP.ptr_;
+  JP.ptr_ = tmp;
+  return *this;
+}
+inline JSON& JSONPointer::get() const { return ptr_->value; }
+inline JSON* JSONPointer::operator->() const { return &ptr_->value; }
+
+#endif
+
 }  // namespace internal
 
 // State is passed to a running Benchmark and contains state for the
@@ -566,11 +603,15 @@ class State {
   // per iteration.
   //
   // REQUIRES: a benchmark has exited its benchmarking loop.
-  BENCHMARK_ALWAYS_INLINE
-  void SetBytesProcessed(size_t bytes) { bytes_processed_ = bytes; }
+  void SetBytesProcessed(size_t bytes) {
+    Counter C(bytes, Counter::kIsRate);
+    SetCounter("bytes_per_second", C);
+  }
 
-  BENCHMARK_ALWAYS_INLINE
-  size_t bytes_processed() const { return bytes_processed_; }
+  size_t bytes_processed() const {
+    Counter C = GetCounter("bytes_per_second");
+    return static_cast<size_t>(C.value);
+  }
 
   // If this routine is called with complexity_n > 0 and complexity report is
   // requested for the
@@ -578,10 +619,16 @@ class State {
   // and complexity_n will
   // represent the length of N.
   BENCHMARK_ALWAYS_INLINE
-  void SetComplexityN(int complexity_n) { complexity_n_ = complexity_n; }
+  void SetComplexityN(int complexity_n) {
+    Counter C(complexity_n, Counter::kDefaults);
+    SetCounter("complexity_n", C);
+  }
 
   BENCHMARK_ALWAYS_INLINE
-  int complexity_length_n() { return complexity_n_; }
+  int complexity_length_n() {
+    Counter C = GetCounter("complexity_n");
+    return static_cast<int>(C.value);
+  }
 
   // If this routine is called with items > 0, then an items/s
   // label is printed on the benchmark report line for the currently
@@ -589,11 +636,15 @@ class State {
   // benchmark where a processing items/second output is desired.
   //
   // REQUIRES: a benchmark has exited its benchmarking loop.
-  BENCHMARK_ALWAYS_INLINE
-  void SetItemsProcessed(size_t items) { items_processed_ = items; }
+  void SetItemsProcessed(size_t items) {
+    Counter C(items, Counter::kIsRate);
+    SetCounter("items_per_second", C);
+  }
 
-  BENCHMARK_ALWAYS_INLINE
-  size_t items_processed() const { return items_processed_; }
+  size_t items_processed() const {
+    Counter C = GetCounter("items_per_second");
+    return static_cast<size_t>(C.value);
+  }
 
   // If this routine is called, the specified label is printed at the
   // end of the benchmark report line for the currently executing
@@ -613,6 +664,20 @@ class State {
     this->SetLabel(str.c_str());
   }
 
+#ifdef BENCHMARK_HAS_CXX11
+  JSON& GetJSON() { return json_output_.get(); }
+  const JSON& GetJSON() const { return json_output_.get(); }
+
+  void SetData(std::string const& Key, JSON Value) { GetJSON()[Key] = Value; }
+  JSON GetData(std::string const& Key) const { return GetJSON().at(Key); }
+
+  JSON const& GetInputData() const { return json_input_.get(); }
+#endif
+ private:
+  void SetCounter(std::string const& Key, Counter C);
+  Counter GetCounter(std::string const& Key) const;
+
+ public:
   // Range arguments for this run. CHECKs if the argument has been set.
   BENCHMARK_ALWAYS_INLINE
   int range(std::size_t pos = 0) const {
@@ -636,11 +701,6 @@ class State {
 
   std::vector<int> range_;
 
-  size_t bytes_processed_;
-  size_t items_processed_;
-
-  int complexity_n_;
-
   bool error_occurred_;
 
  public:
@@ -655,13 +715,15 @@ class State {
   // TODO(EricWF) make me private
   State(size_t max_iters, const std::vector<int>& ranges, int thread_i,
         int n_threads, internal::ThreadTimer* timer,
-        internal::ThreadManager* manager);
+        internal::ThreadManager* manager, internal::JSONPointer json_input);
 
  private:
   void StartKeepRunning();
   void FinishKeepRunning();
   internal::ThreadTimer* timer_;
   internal::ThreadManager* manager_;
+  internal::JSONPointer json_output_;
+  internal::JSONPointer json_input_;
   BENCHMARK_DISALLOW_COPY_AND_ASSIGN(State);
 };
 
@@ -734,6 +796,7 @@ class BenchmarkInfoBase {
   BigOFunc* complexity_lambda;
   std::vector<Statistics> statistics;
   std::vector<int> thread_counts;
+  std::vector<JSONPointer> user_data;
 
  protected:
   BenchmarkInfoBase(const char* Name);
@@ -743,6 +806,7 @@ class BenchmarkInfoBase {
 };
 
 // Used inside the benchmark implementation
+#ifdef BENCHMARK_HAS_CXX11
 class BenchmarkInstance {
  public:
   std::string name;
@@ -750,8 +814,10 @@ class BenchmarkInstance {
   const BenchmarkInfoBase* info;
   std::vector<int> arg;
   int threads;  // Number of concurrent threads to us
+  JSON input_data;
   bool last_benchmark_instance;
 };
+#endif
 
 // ------------------------------------------------------
 // Benchmark registration object.  The BENCHMARK() macro expands
@@ -910,8 +976,12 @@ class Benchmark : protected BenchmarkInfoBase {
   // Equivalent to ThreadRange(NumCPUs(), NumCPUs())
   Benchmark* ThreadPerCpu();
 
+#ifdef BENCHMARK_HAS_CXX11
+  Benchmark* WithData(JSON data);
+
   // Generate all BenchmarkInstance's for this benchmark.
   std::vector<BenchmarkInstance> GenerateInstances() const;
+#endif
 
   virtual void Run(State& state) = 0;
 
@@ -1013,8 +1083,15 @@ class ConsoleReporter {
   static ConsoleReporter& Get();
 
   void SetOutputOptions(OutputOptions opts) { output_options_ = opts; }
-
   OutputOptions GetOutputOptions() const { return output_options_; }
+
+  void EnableColor(bool value = true) {
+    if (value)
+      output_options_ = static_cast<OutputOptions>(output_options_ | OO_Color);
+    else
+      output_options_ =
+          static_cast<OutputOptions>(output_options_ & (~OO_Color));
+  }
 
   void Report(JSON const&);
   void operator()(CallbackKind K, JSON const& J);

@@ -60,7 +60,7 @@ compile_benchmark_test(diagnostics_test)
 add_test(diagnostics_test diagnostics_test --benchmark_min_time=0.01)
 
 compile_benchmark_test(skip_with_error_test)
-add_test(skip_with_error_test skip_with_error_test --benchmark_min_time=0.01 --benchmark_color=0)
+add_test(skip_with_error_test skip_with_error_test --benchmark_min_time=0.01)
 
 compile_benchmark_test(donotoptimize_test)
 # Some of the issues with DoNotOptimize only occur when optimization is enabled
@@ -83,16 +83,16 @@ compile_benchmark_test(multiple_ranges_test)
 add_test(multiple_ranges_test multiple_ranges_test --benchmark_min_time=0.01)
 
 compile_output_test(reporter_output_test)
-add_test(reporter_output_test reporter_output_test --benchmark_min_time=0.01 --benchmark_color=0)
+add_test(reporter_output_test reporter_output_test --benchmark_min_time=0.01)
 
 compile_output_test(templated_fixture_test)
 add_test(templated_fixture_test templated_fixture_test --benchmark_min_time=0.01)
 
 compile_output_test(user_counters_test)
-add_test(user_counters_test user_counters_test --benchmark_color=0 --benchmark_min_time=0.01)
+add_test(user_counters_test user_counters_test --benchmark_min_time=0.01)
 
 compile_output_test(user_counters_tabular_test)
-add_test(user_counters_tabular_test user_counters_tabular_test --benchmark_counters_tabular=true --benchmark_color=0 --benchmark_min_time=0.01)
+add_test(user_counters_tabular_test user_counters_tabular_test --benchmark_counters_tabular=true --benchmark_min_time=0.01)
 
 compile_benchmark_test(new_api_test)
 add_test(new_api_test new_api_test --benchmark_min_time=0.01)
@@ -123,7 +123,7 @@ else()
   set(COMPLEXITY_MIN_TIME "0.01")
 endif()
 compile_output_test(complexity_test)
-add_test(complexity_benchmark complexity_test --benchmark_color=0 --benchmark_min_time=${COMPLEXITY_MIN_TIME})
+add_test(complexity_benchmark complexity_test --benchmark_min_time=${COMPLEXITY_MIN_TIME})
 
 # Add the coverage command(s)
 if(CMAKE_BUILD_TYPE)
