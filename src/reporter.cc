@@ -31,6 +31,7 @@
 
 #include "benchmark_commandline.h"
 #include "timers.h"
+#include "utility.h"
 
 namespace benchmark {
 namespace {
@@ -151,6 +152,14 @@ static void IgnoreColorPrint(std::ostream& out, LogColor, const char* fmt,
 
 typedef void(PrinterFn)(std::ostream&, LogColor, const char*, ...);
 
+void ConsoleReporter::Report(JSON const& result) {
+  if (result.is_array()) {
+    for (auto& R : result) ReportResults(R);
+  } else {
+    ReportResults(result);
+  }
+}
+
 void ConsoleReporter::ReportResults(JSON const& result) {
   auto ReportSingle = [&, this](const JSON run) {
     // print the header:
@@ -179,21 +188,27 @@ void ConsoleReporter::ReportResults(JSON const& result) {
     // waiting for the full results before printing, or printing twice.
     PrintRunData(run);
   };
-  JSON runs = result.at("runs");
-  if (runs.size() == 1 || !result.at("report_aggregates_only").get<bool>()) {
-    for (JSON R : runs) ReportSingle(R);
+  std::string Kind = result.at("kind");
+  if (Kind == "comparison") {
+    ReportSingle(result);
+  } else {
+    JSON runs = result.at("runs");
+    if (runs.size() == 1 || !result.at("report_aggregates_only").get<bool>()) {
+      for (JSON R : runs) ReportSingle(R);
+    }
+    JSON stats = result.at("stats");
+    for (JSON R : stats) ReportSingle(R);
   }
-  JSON stats = result.at("stats");
-  for (JSON R : stats) ReportSingle(R);
   FlushStreams();
 }
 
 static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
+                           LogColor name_color,
                            ConsoleReporter::OutputOptions output_options,
-                           const JSON& result) {
+                           size_t name_field_width, const JSON& result) {
   std::string Name = result.at("name");
-  std::string Kind = result.at("kind");
-
+  // std::string Kind = result.at("kind");
+  printer(Out, name_color, "%-*s ", name_field_width, Name.c_str());
   if (result.get_at<std::string>("kind") == "error") {
     printer(Out, COLOR_RED, "ERROR OCCURRED: \'%s\'",
             result.get_at<std::string>("error_message").c_str());
@@ -274,6 +289,41 @@ static void PrintComplexityRun(std::ostream& Out, PrinterFn* printer,
           RMS.get_at<double>("cpu_time") * 100.0);
 }
 
+static void PrintComparisonRun(std::ostream& Out, PrinterFn* printer,
+                               ConsoleReporter::OutputOptions output_options,
+                               size_t name_field_width, const JSON& result) {
+  name_field_width = std::max(std::strlen("Comparison:"), name_field_width);
+  PrintNormalRun(Out, printer, COLOR_YELLOW, output_options, name_field_width,
+                 GetRunOrMeanStat(result.at("old_result")));
+  printer(Out, COLOR_DEFAULT, "\n");
+  PrintNormalRun(Out, printer, COLOR_YELLOW, output_options, name_field_width,
+                 GetRunOrMeanStat(result.at("new_result")));
+  printer(Out, COLOR_DEFAULT, "\n");
+  JSON compare = result.at("comparison");
+  const double real_time = compare.at("real_iteration_time");
+  const double cpu_time = compare.at("cpu_iteration_time");
+
+  printer(Out, COLOR_BLUE, "%-*s", name_field_width, "Comparison: ");
+
+  // const double time_unit_mul = result.at("time_unit_multiplier");
+  // FIXME:const char* timeLabel = GetTimeUnitString(result.time_unit);
+  auto PrintPercent = [&](double P) {
+    LogColor color = COLOR_CYAN;
+    if (P > 0.05)
+      color = COLOR_RED;
+    else if (P > -0.07)
+      color = COLOR_WHITE;
+    volatile double Rounded = P;
+    if (Rounded >= 1.0)
+      printer(Out, color, " %10.2f x", Rounded);
+    else
+      printer(Out, color, " %10.2f %%", Rounded * 100.0);
+  };
+  PrintPercent(real_time);
+  PrintPercent(cpu_time);
+
+  // printer(Out, COLOR_YELLOW, "%10.2f %% %10.2f %% ", real_time, cpu_time);
+}
 void ConsoleReporter::PrintRunData(const JSON& result) {
   auto& Out = GetOutputStream();
   PrinterFn* printer =
@@ -282,15 +332,17 @@ void ConsoleReporter::PrintRunData(const JSON& result) {
   std::string Name = result.at("name");
   std::string Kind = result.at("kind");
 
-  auto name_color = (Kind == "complexity") ? COLOR_BLUE : COLOR_GREEN;
   if (Kind == "normal" || Kind == "error") {
-    printer(Out, name_color, "%-*s ", name_field_width_, Name.c_str());
-    PrintNormalRun(Out, printer, output_options_, result);
+    PrintNormalRun(Out, printer, COLOR_GREEN, output_options_,
+                   name_field_width_, result);
+  } else if (Kind == "comparison") {
+    PrintComparisonRun(Out, printer, output_options_, name_field_width_,
+                       result);
   } else if (Kind == "complexity") {
     PrintComplexityRun(Out, printer, result, name_field_width_);
   } else if (Kind == "statistic") {
-    printer(Out, name_color, "%-*s ", name_field_width_, Name.c_str());
-    PrintNormalRun(Out, printer, output_options_, result);
+    PrintNormalRun(Out, printer, COLOR_GREEN, output_options_,
+                   name_field_width_, result);
   } else {
     // FIXME: Do something
     std::cerr << "Unknown thing!" << std::endl;

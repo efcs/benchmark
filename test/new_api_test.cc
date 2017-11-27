@@ -2,6 +2,7 @@
 #undef NDEBUG
 #endif
 #include <chrono>
+#include <iostream>
 #include <thread>
 #include "../src/check.h"
 #include "benchmark/benchmark.h"
@@ -46,19 +47,26 @@ void test_json_data() {
   }
 }
 
-int main(int argc, char **argv) {
-  Initialize(&argc, argv);
-  auto BMF = [](State &st) {
+void test_compare() {
+  auto BM_Slow = [](State &st) {
     for (auto _ : st) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   };
-  auto *B1 = RegisterBenchmark("bench1", BMF);
-  auto *B2 = RegisterBenchmark("bench2", BMF);
-  ((void)B1);
-  ((void)B2);
-  //ReportResults(
-  //    CompareResults(RunBenchmark(B1), RunBenchmark(B2))
-  //);
+  auto BM_Fast = [](State &st) {
+    for (auto _ : st) {
+    }
+  };
+  auto *B1 = RegisterBenchmark("bench_slow", BM_Slow);
+  auto *B2 = RegisterBenchmark("bench_fast", BM_Fast);
+  auto R1 = RunBenchmark(B1);
+  auto R2 = RunBenchmark(B2);
+  GetGlobalReporter().Report(CompareResults(R1, R2));
+  GetGlobalReporter().Report(CompareResults(R2, R1));
+}
+
+int main(int argc, char **argv) {
+  Initialize(&argc, argv);
   test_json_data();
+  test_compare();
 }

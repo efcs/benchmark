@@ -211,6 +211,10 @@ static void JoinUserData(JSON& Dest, JSON const& New) {
       Counter Y = Value;
       X.value += Y.value;
       Dest[Key] = X;
+    } else if (New.count("patch_on_join") != 0) {
+      JSON to_patch = {{"to", Dest.at(Key)}, {"from", New}};
+      to_patch.patch(New.at("patch_on_join"));
+      Dest[Key] = to_patch.at("to");
     }
   }
 }
@@ -256,6 +260,7 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
       if (J.value("kind", std::string{}) == "counter") {
         Counter C = J;
         J.at("value") = internal::Finish(C, seconds, b.threads);
+      } else if (J.count("patch_on_run_end") != 0) {
       }
     }
     json_report["user_data"] = user_data;
@@ -395,11 +400,13 @@ JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
            ? FLAGS_benchmark_report_aggregates_only
            : b.info->report_mode == internal::RM_ReportAggregatesOnly);
 
-  JSON instance_info{{"args", b.arg}, {"threads", b.threads}};
-
+  JSON instance_info{
+      {"args", b.arg}, {"threads", b.threads}, {"repetitions", repeats}};
+  if (has_explicit_iteration_count) instance_info["iterations"] = iters;
   JSON reports_json = {{"name", b.name},
                        {"family", b.info->family_name},
                        {"instance", instance_info},
+                       {"kind", "normal"},
                        {"runs", run_reports},
                        {"stats", stat_reports},
                        {"report_aggregates_only", report_aggregates_only}};
