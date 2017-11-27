@@ -495,6 +495,10 @@ Counter State::GetCounter(std::string const& Key) const {
   return C;
 }
 
+double State::cpu_time_used() const { return timer_->cpu_time_used(); }
+
+double State::real_time_used() const { return timer_->real_time_used(); }
+
 namespace internal {
 namespace {
 

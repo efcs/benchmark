@@ -646,6 +646,12 @@ class State {
     return static_cast<size_t>(C.value);
   }
 
+  // REQUIRES: A benchmark has exicted its benchmarking loop
+  double cpu_time_used() const;
+
+  // REQUIRES: A benchmark has exicted its benchmarking loop
+  double real_time_used() const;
+
   // If this routine is called, the specified label is printed at the
   // end of the benchmark report line for the currently executing
   // benchmark.  Example:
