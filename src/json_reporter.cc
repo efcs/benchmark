@@ -60,6 +60,20 @@ std::string FormatKV(std::string const& key, double value) {
   return ss.str();
 }
 
+std::string IndentJSONCloseBrace(std::string s, int num_indent) {
+  assert(!s.empty() && s.back() == '}');
+  s.erase(--s.end());
+  for (int i=0; i < num_indent; ++i)
+    s += ' ';
+  s += '}';
+  return s;
+}
+
+std::string DumpJSONWithIndent(json const& j, int size) {
+  std::stringstream ss;
+  ss << std::setw(size) << j;
+  return IndentJSONCloseBrace(ss.str(), size - 2);
+}
 
 }  // end namespace
 
@@ -69,11 +83,7 @@ bool JSONReporter::ReportContext(const json& context) {
   out << "{\n";
   std::string inner_indent(2, ' ');
 
-  // Open context block and print context information.
-  std::stringstream ss;
-  ss << std::setw(4) << context;
-
-  out << inner_indent << "\"context\": " << ss.str() << ",\n";
+  out << inner_indent << "\"context\": " << DumpJSONWithIndent(context, 4) << ",\n";
   out << inner_indent << "\"benchmarks\": [\n";
   return true;
 }
@@ -154,10 +164,11 @@ void JSONReporter::PrintRunData(Run const& run) {
     out << ",\n" << indent << FormatKV("label", run.report_label);
   }
   if (!run.json_output.empty()) {
+    int indent_size = static_cast<int>(indent.size()) + 2;
     out << ",\n"
         << indent
-        << "\"json_output\": " << std::setw(static_cast<int>(indent.size()) + 2)
-        << run.json_output;
+        << "\"json_output\": "
+        << DumpJSONWithIndent(run.json_output, indent_size);
   }
   out << '\n';
 }
