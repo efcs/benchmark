@@ -33,8 +33,8 @@
 
 namespace benchmark {
 
-bool ConsoleReporter::ReportContext(const Context& context) {
-  name_field_width_ = context.name_field_width;
+bool ConsoleReporter::ReportContext(const json& context) {
+  name_field_width_ = context.at("name_field_width");
   printed_header_ = false;
   prev_counters_.clear();
 

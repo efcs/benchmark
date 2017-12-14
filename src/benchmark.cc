@@ -516,8 +516,15 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
   if (has_repetitions) name_field_width += 1 + stat_field_width;
 
   // Print header here
-  BenchmarkReporter::Context context;
-  context.name_field_width = name_field_width;
+#if defined(NDEBUG)
+  const char build_type[] = "release";
+#else
+  const char build_type[] = "debug";
+#endif
+  json context{{"date", LocalDateTimeString()},
+               {"name_field_width", name_field_width},
+               {"cpu_info", GetCPUInfo()},
+               {"library_build_type", build_type}};
 
   // Keep track of runing times of all instances of current benchmark
   std::vector<BenchmarkReporter::Run> complexity_reports;

@@ -1235,25 +1235,8 @@ class Fixture : public internal::Benchmark {
 namespace benchmark {
 
 #ifndef BENCHMARK_HAS_NO_JSON_HEADER
-struct CPUInfo {
-  struct CacheInfo {
-    std::string type;
-    int level;
-    int size;
-    int num_sharing;
-  };
 
-  int num_cpus;
-  double cycles_per_second;
-  std::vector<CacheInfo> caches;
-  bool scaling_enabled;
-
-  static const CPUInfo& Get();
-
- private:
-  CPUInfo();
-  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(CPUInfo);
-};
+const json& GetCPUInfo();
 
 // Interface for custom benchmark result printers.
 // By default, benchmark reports are printed to stdout. However an application
@@ -1262,13 +1245,6 @@ struct CPUInfo {
 // The reporter object must implement the following interface.
 class BenchmarkReporter {
  public:
-  struct Context {
-    CPUInfo const& cpu_info;
-    // The number of chars in the longest benchmark name.
-    size_t name_field_width;
-
-    Context();
-  };
 
   struct Run {
     Run()
@@ -1343,7 +1319,7 @@ class BenchmarkReporter {
   // platform under which the benchmarks are running. The benchmark run is
   // never started if this function returns false, allowing the reporter
   // to skip runs based on the context information.
-  virtual bool ReportContext(const Context& context) = 0;
+  virtual bool ReportContext(const json&) = 0;
 
   // Called once for each group of benchmark runs, gives information about
   // cpu-time and heap memory usage during the benchmark run. If the group
@@ -1381,7 +1357,7 @@ class BenchmarkReporter {
   // Write a human readable string to 'out' representing the specified
   // 'context'.
   // REQUIRES: 'out' is non-null.
-  static void PrintBasicContext(std::ostream* out, Context const& context);
+  static void PrintBasicContext(std::ostream* out, json const& context);
 
  private:
   std::ostream* output_stream_;
@@ -1403,7 +1379,7 @@ public:
       : output_options_(opts_), name_field_width_(0),
         prev_counters_(), printed_header_(false) {}
 
-  virtual bool ReportContext(const Context& context);
+  virtual bool ReportContext(const json&);
   virtual void ReportRuns(const std::vector<Run>& reports);
 
  protected:
@@ -1419,7 +1395,7 @@ public:
 class JSONReporter : public BenchmarkReporter {
  public:
   JSONReporter() : first_report_(true) {}
-  virtual bool ReportContext(const Context& context);
+  virtual bool ReportContext(const json&);
   virtual void ReportRuns(const std::vector<Run>& reports);
   virtual void Finalize();
 

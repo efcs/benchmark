@@ -21,30 +21,33 @@ static int AddContextCases() {
            });
   AddCases(TC_JSONOut, {{"^\\{", MR_Default},
                         {"\"context\":", MR_Next},
-                        {"\"date\": \"", MR_Next},
-                        {"\"num_cpus\": %int,$", MR_Next},
-                        {"\"mhz_per_cpu\": %float,$", MR_Next},
-                        {"\"cpu_scaling_enabled\": ", MR_Next},
-                        {"\"caches\": \\[$", MR_Next}});
-  auto const& Caches = benchmark::CPUInfo::Get().caches;
+                        {"\"cpu_info\":", MR_Next},
+                        {"\"caches\": \\[$"}});
+
+  auto const& Caches = benchmark::GetCPUInfo().at("caches");
   if (!Caches.empty()) {
     AddCases(TC_ConsoleErr, {{"CPU Caches:$", MR_Next}});
   }
   for (size_t I = 0; I < Caches.size(); ++I) {
     std::string num_caches_str =
-        Caches[I].num_sharing != 0 ? " \\(x%int\\)$" : "$";
+        Caches[I]["num_sharing"] != 0 ? " \\(x%int\\)$" : "$";
     AddCases(
         TC_ConsoleErr,
         {{"L%int (Data|Instruction|Unified) %intK" + num_caches_str, MR_Next}});
     AddCases(TC_JSONOut, {{"\\{$", MR_Next},
-                          {"\"type\": \"", MR_Next},
                           {"\"level\": %int,$", MR_Next},
+                          {"\"num_sharing\": %int,$", MR_Next},
                           {"\"size\": %int,$", MR_Next},
-                          {"\"num_sharing\": %int$", MR_Next},
+                          {"\"type\": \"", MR_Next},
                           {"}[,]{0,1}$", MR_Next}});
   }
-
   AddCases(TC_JSONOut, {{"],$"}});
+  AddCases(TC_JSONOut, {{"\"cpu_scaling_enabled\": ", MR_Next},
+                        {"\"cycles_per_second\": %float,$", MR_Next},
+                        {"\"num_cpus\": %int$", MR_Next},
+                        {"},$", MR_Next},
+                        {"\"date\": \"", MR_Next}});
+
   return 0;
 }
 int dummy_register = AddContextCases();
@@ -344,8 +347,6 @@ ADD_CASES(TC_ConsoleOut, {{"^BM_JSONInputTest/case1 %console_report$"},
                           {"^BM_JSONInputTest/b:42/c:101 %console_report$"}});
 ADD_CASES(TC_JSONOut, {{"\"name\": \"BM_JSONInputTest/case1\",$"},
                        {"\"name\": \"BM_JSONInputTest/b:42/c:101\",$"}});
-ADD_CASES(TC_CSVOut, {{"^\"BM_JSONInputTest/case1\",%csv_report$"},
-                      {"^\"BM_JSONInputTest/b:42/c:101\",%csv_report$"}});
 
 void BM_JSONOutputTest(benchmark::State& st) {
   for (auto _ : st) {

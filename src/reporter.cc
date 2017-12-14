@@ -31,28 +31,32 @@ BenchmarkReporter::BenchmarkReporter()
 BenchmarkReporter::~BenchmarkReporter() {}
 
 void BenchmarkReporter::PrintBasicContext(std::ostream *out,
-                                          Context const &context) {
+                                          json const &context) {
   CHECK(out) << "cannot be null";
   auto &Out = *out;
 
-  Out << LocalDateTimeString() << "\n";
+  Out << context.at("date").get<std::string>() << "\n";
 
-  const CPUInfo &info = context.cpu_info;
-  Out << "Run on (" << info.num_cpus << " X "
-      << (info.cycles_per_second / 1000000.0) << " MHz CPU "
-      << ((info.num_cpus > 1) ? "s" : "") << ")\n";
-  if (info.caches.size() != 0) {
+  const auto &info = context["cpu_info"];
+  Out << "Run on (" << info.at("num_cpus") << " X "
+      << (info.at("cycles_per_second").get<double>() / 1000000.0) << " MHz CPU "
+      << ((info.at("num_cpus") > 1) ? "s" : "") << ")\n";
+  if (info.at("caches").size() != 0) {
     Out << "CPU Caches:\n";
-    for (auto &CInfo : info.caches) {
-      Out << "  L" << CInfo.level << " " << CInfo.type << " "
-          << (CInfo.size / 1000) << "K";
-      if (CInfo.num_sharing != 0)
-        Out << " (x" << (info.num_cpus / CInfo.num_sharing) << ")";
+    for (auto &CInfo : info.at("caches")) {
+      Out << "  L" << CInfo.at("level") << " "
+          << CInfo.at("type").get<std::string>() << " "
+          << (CInfo.at("size").get<int>() / 1000) << "K";
+      if (CInfo.at("num_sharing") != 0)
+        Out << " (x"
+            << (info.at("num_cpus").get<int>() /
+                CInfo.at("num_sharing").get<int>())
+            << ")";
       Out << "\n";
     }
   }
 
-  if (info.scaling_enabled) {
+  if (info.at("cpu_scaling_enabled").get<bool>()) {
     Out << "***WARNING*** CPU scaling is enabled, the benchmark "
            "real time measurements may be noisy and will incur extra "
            "overhead.\n";
@@ -64,7 +68,6 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 #endif
 }
 
-BenchmarkReporter::Context::Context() : cpu_info(CPUInfo::Get()) {}
 
 double BenchmarkReporter::Run::GetAdjustedRealTime() const {
   double new_time = real_accumulated_time * GetTimeUnitMultiplier(time_unit);
