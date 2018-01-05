@@ -48,9 +48,11 @@ void CSVReporter::ReportRuns(const std::vector<Run> & reports) {
   if (!printed_header_) {
     // save the names of all the user counters
     for (const auto& run : reports) {
+#if 0
       for (const auto& cnt : run.counters) {
         user_counter_names_.insert(cnt.first);
       }
+#endif
     }
 
     // print the header
@@ -67,12 +69,14 @@ void CSVReporter::ReportRuns(const std::vector<Run> & reports) {
   } else {
     // check that all the current counters are saved in the name set
     for (const auto& run : reports) {
+#if 0
       for (const auto& cnt : run.counters) {
         CHECK(user_counter_names_.find(cnt.first) != user_counter_names_.end())
               << "All counters must be present in each run. "
               << "Counter named \"" << cnt.first
               << "\" was not in a run after being added to the header";
       }
+#endif
     }
   }
 

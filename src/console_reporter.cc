@@ -14,7 +14,7 @@
 
 #include "benchmark/benchmark.h"
 #include "complexity.h"
-#include "counter.h"
+
 
 #include <algorithm>
 #include <cstdint>
@@ -52,12 +52,24 @@ bool ConsoleReporter::ReportContext(const json& context) {
   return true;
 }
 
+using CounterList = ConsoleReporter::CounterList ;
+
+static CounterList GatherCounters(const json& output) {
+  CounterList res;
+  for (auto& KV : output) {
+    if (JsonIsA<JT_Counter>(KV.value()))
+      res.push_back({KV.key(), KV.value()});
+  }
+  return res;
+}
+
 void ConsoleReporter::PrintHeader(const Run& run) {
   std::string str = FormatString("%-*s %13s %13s %10s", static_cast<int>(name_field_width_),
                                  "Benchmark", "Time", "CPU", "Iterations");
-  if(!run.counters.empty()) {
+  auto counter_list = GatherCounters(run.json_output);
+  if(!counter_list.empty()) {
     if(output_options_ & OO_Tabular) {
-      for(auto const& c : run.counters) {
+      for(auto const& c :counter_list) {
         str += FormatString(" %10s", c.first.c_str());
       }
     } else {
@@ -69,18 +81,30 @@ void ConsoleReporter::PrintHeader(const Run& run) {
   GetOutputStream() << line << "\n" << str << line << "\n";
 }
 
+bool ConsoleReporter::CountersMatchPrevious(CounterList const &CL) const {
+  if (prev_counters_.size() != CL.size())
+    return false;
+  for (int I=0; I < CL.size(); ++I) {
+    if (CL[I].first != prev_counters_[I].first)
+      return false;
+  }
+  return true;
+}
+
 void ConsoleReporter::ReportRuns(const std::vector<Run>& reports) {
   for (const auto& run : reports) {
     // print the header:
     // --- if none was printed yet
     bool print_header = !printed_header_;
+    auto counter_list = GatherCounters(run.json_output);
+
     // --- or if the format is tabular and this run
     //     has different fields from the prev header
     print_header |= (output_options_ & OO_Tabular) &&
-                    (!internal::SameNames(run.counters, prev_counters_));
+                    (CountersMatchPrevious(counter_list));
     if (print_header) {
       printed_header_ = true;
-      prev_counters_ = run.counters;
+      prev_counters_ = counter_list;
       PrintHeader(run);
     }
     // As an alternative to printing the headers like this, we could sort
@@ -147,7 +171,8 @@ void ConsoleReporter::PrintRunData(const Run& result) {
     printer(Out, COLOR_CYAN, "%10lld", result.iterations);
   }
 
-  for (auto& c : result.counters) {
+  auto counter_list = GatherCounters(result.json_output);
+  for (auto& c : counter_list) {
     const std::size_t cNameLen = std::max(std::string::size_type(10),
                                           c.first.length());
     auto const& s = HumanReadableNumber(c.second.value, 1000);

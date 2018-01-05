@@ -25,7 +25,6 @@ struct Benchmark::Instance {
   bool use_manual_time;
   BigO complexity;
   BigOFunc* complexity_lambda;
-  UserCounters counters;
   const std::vector<Statistics>* statistics;
   bool last_benchmark_instance;
   int repetitions;

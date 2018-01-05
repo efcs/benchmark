@@ -182,6 +182,8 @@ if (BENCHMARK_USE_LIBCXX)
   endif()
 endif(BENCHMARK_USE_LIBCXX)
 
+add_cxx_compiler_flag(-fcolor-diagnostics)
+
 # C++ feature checks
 # Determine the correct regular expression engine to use
 cxx_feature_check(STD_REGEX)

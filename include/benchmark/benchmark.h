@@ -282,6 +282,30 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* console_reporter,
 
 #ifndef BENCHMARK_HAS_NO_JSON_HEADER
 using json = nlohmann::json;
+#define BENCHMARK_DECLARE_TO_FROM_JSON(Type) \
+  void to_json(json& output, const Type& input); \
+  void from_json(const json& output, Type& input);
+
+
+enum JsonObjectType {
+  JT_Counter
+};
+BENCHMARK_DECLARE_TO_FROM_JSON(JsonObjectType)
+namespace internal {
+bool CheckJsonType(json const& input, JsonObjectType Type);
+}
+template <JsonObjectType JT>
+bool JsonIsA(json const& input) {
+  return internal::CheckJsonType(input, JT);
+}
+
+inline auto JsonKeyValue(json const& obj) -> decltype(json::iterator_wrapper(obj)) {
+  return json::iterator_wrapper(obj);
+}
+
+
+#else
+#define BENCHMARK_DECLARE_TO_FROM_JSON(Type)
 #endif
 
 namespace internal {
@@ -413,21 +437,33 @@ public:
   BENCHMARK_ALWAYS_INLINE operator double const& () const { return value; }
   BENCHMARK_ALWAYS_INLINE operator double      & ()       { return value; }
 
-};
+  Counter *Finish(double time, double threads) {
+    if (flags & Counter::kIsRate)
+      value /= time;
 
-// This is the container for the user-defined counters.
-typedef std::map<std::string, Counter> UserCounters;
+    if (flags & Counter::kAvgThreads)
+      value /= threads;
+
+    return this;
+  }
+
+
+};
+BENCHMARK_DECLARE_TO_FROM_JSON(Counter)
+BENCHMARK_DECLARE_TO_FROM_JSON(Counter::Flags)
 
 
 // TimeUnit is passed to a benchmark in order to specify the order of magnitude
 // for the measured time.
 enum TimeUnit { kNanosecond, kMicrosecond, kMillisecond };
+BENCHMARK_DECLARE_TO_FROM_JSON(TimeUnit)
 
 // BigO is passed to a benchmark in order to specify the asymptotic
 // computational
 // complexity for the benchmark. In case oAuto is selected, complexity will be
 // calculated automatically to the best fit.
 enum BigO { oNone, o1, oN, oNSquared, oNCubed, oLogN, oNLogN, oAuto, oLambda };
+BENCHMARK_DECLARE_TO_FROM_JSON(BigO)
 
 // BigOFunc is passed to a benchmark in order to specify the asymptotic
 // computational complexity for the benchmark.
@@ -654,8 +690,7 @@ class State {
   bool error_occurred_;
 
  public:
-  // Container for user-defined counters.
-  UserCounters counters;
+
   // Index of the executing thread. Values from [0, threads).
   const int thread_index;
   // Number of threads concurrently executing the benchmark.
@@ -1264,8 +1299,7 @@ class BenchmarkReporter {
           complexity_lambda(),
           complexity_n(0),
           report_big_o(false),
-          report_rms(false),
-          counters() {}
+          report_rms(false) {}
 
     std::string benchmark_name;
     std::string report_label;  // Empty if not set by benchmark.
@@ -1307,8 +1341,6 @@ class BenchmarkReporter {
     // Inform print function whether the current run is a complexity report
     bool report_big_o;
     bool report_rms;
-
-    UserCounters counters;
 
     json json_output;
   };
@@ -1386,13 +1418,18 @@ public:
   virtual bool ReportContext(const json& context);
   virtual void ReportRuns(const std::vector<Run>& reports);
 
+  using CounterList = std::vector<std::pair<std::string, Counter>>;
  protected:
+
   virtual void PrintRunData(const Run& report);
   virtual void PrintHeader(const Run& report);
 
+  bool CountersMatchPrevious(CounterList const& CL) const;
+
   OutputOptions output_options_;
   size_t name_field_width_;
-  UserCounters prev_counters_;
+
+  CounterList prev_counters_;
   bool printed_header_;
 };
 

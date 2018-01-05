@@ -37,7 +37,6 @@
 #include "colorprint.h"
 #include "commandlineflags.h"
 #include "complexity.h"
-#include "counter.h"
 #include "internal_macros.h"
 #include "log.h"
 #include "mutex.h"
@@ -156,7 +155,6 @@ class ThreadManager {
     std::string error_message_;
     bool has_error_ = false;
     json json_output = json::object_t{};
-    UserCounters counters;
   };
   GUARDED_BY(GetBenchmarkMutex()) Result results;
 
@@ -227,6 +225,41 @@ class ThreadTimer {
 
 namespace {
 
+void IncrementUserOutput(json *output_ptr, json const& input) {
+  json& output = *output_ptr;
+  for (auto It=input.begin(); It != input.end(); ++It) {
+    const auto& Key = It.key();
+    const auto& Val = It.value();
+    if (output.count(Key) == 0) {
+      output[Key] = Val;
+      continue;
+    }
+    if (JsonIsA<JT_Counter>(Val)) {
+      Counter Old = output[Key];
+      Counter New = Val;
+      Old += New;
+      output[Key] = Old;
+    } else {
+      // FIXME
+      assert(false && "FIXME");
+    }
+  }
+}
+
+json FinalizeUserOutput(json const& input, double cpu_time, double num_threads) {
+  json output{};
+  assert(input.is_object());
+  for (auto& JO : JsonKeyValue(input)) {
+    auto& Val = JO.value();
+    if (JsonIsA<JT_Counter>(Val)) {
+      output[JO.key()] = Counter(Val).Finish(cpu_time, num_threads);
+    } else {
+      output[JO.key()] = Val;
+    }
+  }
+  return output;
+}
+
 BenchmarkReporter::Run CreateRunReport(
     const benchmark::internal::Benchmark::Instance& b,
     const internal::ThreadManager::Result& results, size_t iters,
@@ -264,9 +297,9 @@ BenchmarkReporter::Run CreateRunReport(
     report.complexity = b.complexity;
     report.complexity_lambda = b.complexity_lambda;
     report.statistics = b.statistics;
-    report.counters = results.counters;
-    internal::Finish(&report.counters, seconds, b.threads);
-    report.json_output = results.json_output;
+    report.json_output = FinalizeUserOutput(results.json_output, seconds, b.threads);
+
+
   }
   return report;
 }
@@ -291,15 +324,7 @@ void RunInThread(const benchmark::internal::Benchmark::Instance* b,
     results.bytes_processed += st.bytes_processed();
     results.items_processed += st.items_processed();
     results.complexity_n += st.complexity_length_n();
-    for (auto It = st.GetOutput().begin(); It != st.GetOutput().end(); ++It) {
-      auto Key = It.key();
-      if (results.json_output.count(Key) == 0) {
-        results.json_output[Key] = It.value();
-        continue;
-      }
-      // FIXME: Figure out how to merge JSON values.
-    }
-    internal::Increment(&results.counters, st.counters);
+    IncrementUserOutput(&results.json_output, st.GetOutput());
   }
   manager->NotifyThreadComplete();
 }
@@ -429,7 +454,6 @@ State::State(size_t max_iters, const std::vector<int>& ranges,
       items_processed_(0),
       complexity_n_(0),
       error_occurred_(false),
-      counters(),
       thread_index(thread_i),
       threads(n_threads),
       max_iterations(max_iters),
