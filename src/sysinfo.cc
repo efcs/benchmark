@@ -214,17 +214,17 @@ int CountSetBitsInCPUMap(std::string Val) {
 }
 
 BENCHMARK_MAYBE_UNUSED
-std::vector<CPUInfo::CacheInfo> GetCacheSizesFromKVFS() {
-  std::vector<CPUInfo::CacheInfo> res;
+std::vector<json> GetCacheSizesFromKVFS() {
+  std::vector<json> res;
   std::string dir = "/sys/devices/system/cpu/cpu0/cache/";
   int Idx = 0;
   while (true) {
-    CPUInfo::CacheInfo info;
     std::string FPath = StrCat(dir, "index", Idx++, "/");
     std::ifstream f(StrCat(FPath, "size").c_str());
     if (!f.is_open()) break;
-    std::string suffix;
-    f >> info.size;
+    std::string type, suffix;
+    int size, level;
+    f >> size;
     if (f.fail())
       PrintErrorAndDie("Failed while reading file '", FPath, "size'");
     if (f.good()) {
@@ -235,25 +235,31 @@ std::vector<CPUInfo::CacheInfo> GetCacheSizesFromKVFS() {
       else if (f && suffix != "K")
         PrintErrorAndDie("Invalid cache size format: Expected bytes ", suffix);
       else if (suffix == "K")
-        info.size *= 1000;
+        size *= 1000;
     }
-    if (!ReadFromFile(StrCat(FPath, "type"), &info.type))
+
+    if (!ReadFromFile(StrCat(FPath, "type"), &type))
       PrintErrorAndDie("Failed to read from file ", FPath, "type");
-    if (!ReadFromFile(StrCat(FPath, "level"), &info.level))
+    if (!ReadFromFile(StrCat(FPath, "level"), &level))
       PrintErrorAndDie("Failed to read from file ", FPath, "level");
     std::string map_str;
     if (!ReadFromFile(StrCat(FPath, "shared_cpu_map"), &map_str))
       PrintErrorAndDie("Failed to read from file ", FPath, "shared_cpu_map");
-    info.num_sharing = CountSetBitsInCPUMap(map_str);
-    res.push_back(info);
+    json info{
+        {"size", size},
+        {"level", level},
+        {"type", type},
+        {"num_sharing", CountSetBitsInCPUMap(map_str)}
+    };
+    res.push_back(std::move(info));
   }
 
   return res;
 }
 
 #ifdef BENCHMARK_OS_MACOSX
-std::vector<CPUInfo::CacheInfo> GetCacheSizesMacOSX() {
-  std::vector<CPUInfo::CacheInfo> res;
+std::vector<json> GetCacheSizesMacOSX() {
+  std::vector<json> res;
   std::array<uint64_t, 4> CacheCounts{{0, 0, 0, 0}};
   GetSysctl("hw.cacheconfig", &CacheCounts);
 
@@ -269,18 +275,19 @@ std::vector<CPUInfo::CacheInfo> GetCacheSizesMacOSX() {
   for (auto& C : Cases) {
     int val;
     if (!GetSysctl(C.name, &val)) continue;
-    CPUInfo::CacheInfo info;
-    info.type = C.type;
-    info.level = C.level;
-    info.size = val;
-    info.num_sharing = static_cast<int>(C.num_sharing);
+    json info{
+      {"type", C.type},
+      {"level", C.level},
+      {"size", val},
+      {"num_sharing", static_cast<int>(C.num_sharing)}
+    };
     res.push_back(std::move(info));
   }
   return res;
 }
 #elif defined(BENCHMARK_OS_WINDOWS)
-std::vector<CPUInfo::CacheInfo> GetCacheSizesWindows() {
-  std::vector<CPUInfo::CacheInfo> res;
+std::vector<json> GetCacheSizesWindows() {
+  std::vector<json> res;
   DWORD buffer_size = 0;
   using PInfo = SYSTEM_LOGICAL_PROCESSOR_INFORMATION;
   using CInfo = CACHE_DESCRIPTOR;
@@ -302,34 +309,37 @@ std::vector<CPUInfo::CacheInfo> GetCacheSizesWindows() {
     // To prevent duplicates, only consider caches where CPU 0 is specified
     if (!B.test(0)) continue;
     CInfo* Cache = &it->Cache;
-    CPUInfo::CacheInfo C;
-    C.num_sharing = B.count();
-    C.level = Cache->Level;
-    C.size = Cache->Size;
+    std::string type;
     switch (Cache->Type) {
       case CacheUnified:
-        C.type = "Unified";
+        type = "Unified";
         break;
       case CacheInstruction:
-        C.type = "Instruction";
+        type = "Instruction";
         break;
       case CacheData:
-        C.type = "Data";
+        type = "Data";
         break;
       case CacheTrace:
-        C.type = "Trace";
+        type = "Trace";
         break;
       default:
-        C.type = "Unknown";
+        type = "Unknown";
         break;
     }
-    res.push_back(C);
+    json info{
+      {"type", type},
+      {"level", Cache->Level},
+      {"size", Cache->Size},
+      {"num_sharing", B.count()}
+    };
+    res.push_back(std::move(info));
   }
   return res;
 }
 #endif
 
-std::vector<CPUInfo::CacheInfo> GetCacheSizes() {
+std::vector<json> GetCacheSizes() {
 #ifdef BENCHMARK_OS_MACOSX
   return GetCacheSizesMacOSX();
 #elif defined(BENCHMARK_OS_WINDOWS)
@@ -503,15 +513,15 @@ double GetCPUCyclesPerSecond() {
 
 }  // end namespace
 
-const CPUInfo& CPUInfo::Get() {
-  static const CPUInfo* info = new CPUInfo();
-  return *info;
+json const& GetCPUInfo() {
+  static const int num_cpus = GetNumCPUs();
+  static const json info{
+      {"num_cpus", num_cpus},
+      {"frequency_mhz", GetCPUCyclesPerSecond() / 1000000.0},
+      {"caches", GetCacheSizes()},
+      {"scaling_enabled", CpuScalingEnabled(num_cpus)}
+  };
+  return info;
 }
-
-CPUInfo::CPUInfo()
-    : num_cpus(GetNumCPUs()),
-      cycles_per_second(GetCPUCyclesPerSecond()),
-      caches(GetCacheSizes()),
-      scaling_enabled(CpuScalingEnabled(num_cpus)) {}
 
 }  // end namespace benchmark

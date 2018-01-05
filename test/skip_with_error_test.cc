@@ -10,7 +10,7 @@ namespace {
 
 class TestReporter : public benchmark::ConsoleReporter {
  public:
-  virtual bool ReportContext(const Context& context) {
+  virtual bool ReportContext(const benchmark::json& context) {
     return ConsoleReporter::ReportContext(context);
   };
 

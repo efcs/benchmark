@@ -64,58 +64,17 @@ int64_t RoundDouble(double v) { return static_cast<int64_t>(v + 0.5); }
 
 }  // end namespace
 
-bool JSONReporter::ReportContext(const Context& context) {
+bool JSONReporter::ReportContext(const json& context) {
   std::ostream& out = GetOutputStream();
 
   out << "{\n";
   std::string inner_indent(2, ' ');
 
-  // Open context block and print context information.
-  out << inner_indent << "\"context\": {\n";
-  std::string indent(4, ' ');
+  out << inner_indent << "\"context\": ";
+  std::stringstream ss;
+  ss << std::setw(4) << context << ",\n";
+  std::string context_str = ss.str();
 
-  std::string walltime_value = LocalDateTimeString();
-  out << indent << FormatKV("date", walltime_value) << ",\n";
-
-  CPUInfo const& info = context.cpu_info;
-  out << indent << FormatKV("num_cpus", static_cast<int64_t>(info.num_cpus))
-      << ",\n";
-  out << indent
-      << FormatKV("mhz_per_cpu",
-                  RoundDouble(info.cycles_per_second / 1000000.0))
-      << ",\n";
-  out << indent << FormatKV("cpu_scaling_enabled", info.scaling_enabled)
-      << ",\n";
-
-  out << indent << "\"caches\": [\n";
-  indent = std::string(6, ' ');
-  std::string cache_indent(8, ' ');
-  for (size_t i = 0; i < info.caches.size(); ++i) {
-    auto& CI = info.caches[i];
-    out << indent << "{\n";
-    out << cache_indent << FormatKV("type", CI.type) << ",\n";
-    out << cache_indent << FormatKV("level", static_cast<int64_t>(CI.level))
-        << ",\n";
-    out << cache_indent
-        << FormatKV("size", static_cast<int64_t>(CI.size) * 1000u) << ",\n";
-    out << cache_indent
-        << FormatKV("num_sharing", static_cast<int64_t>(CI.num_sharing))
-        << "\n";
-    out << indent << "}";
-    if (i != info.caches.size() - 1) out << ",";
-    out << "\n";
-  }
-  indent = std::string(4, ' ');
-  out << indent << "],\n";
-
-#if defined(NDEBUG)
-  const char build_type[] = "release";
-#else
-  const char build_type[] = "debug";
-#endif
-  out << indent << FormatKV("library_build_type", build_type) << "\n";
-  // Close context block and open the list of benchmarks.
-  out << inner_indent << "},\n";
   out << inner_indent << "\"benchmarks\": [\n";
   return true;
 }

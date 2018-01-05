@@ -125,7 +125,7 @@ class TestReporter : public benchmark::BenchmarkReporter {
   TestReporter(std::vector<benchmark::BenchmarkReporter*> reps)
       : reporters_(reps) {}
 
-  virtual bool ReportContext(const Context& context) {
+  virtual bool ReportContext(const benchmark::json& context) {
     bool last_ret = false;
     bool first = true;
     for (auto rep : reporters_) {

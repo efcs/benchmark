@@ -492,6 +492,21 @@ void State::FinishKeepRunning() {
   manager_->StartStopBarrier();
 }
 
+json const& GetBasicContext() {
+#ifdef NDEBUG
+  constexpr const char build_type[] = "release";
+#else
+  constexpr const char build_type[] = "debug";
+#endif
+  // Print header here
+  static const json context {
+      {"date", LocalDateTimeString()},
+      {"library_build_type", build_type},
+      {"cpu_info", GetCPUInfo()}
+  };
+  return context;
+}
+
 namespace internal {
 namespace {
 
@@ -515,9 +530,7 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
   }
   if (has_repetitions) name_field_width += 1 + stat_field_width;
 
-  // Print header here
-  BenchmarkReporter::Context context;
-  context.name_field_width = name_field_width;
+
 
   // Keep track of runing times of all instances of current benchmark
   std::vector<BenchmarkReporter::Run> complexity_reports;
@@ -529,6 +542,9 @@ void RunBenchmarks(const std::vector<Benchmark::Instance>& benchmarks,
     std::flush(reporter->GetOutputStream());
     std::flush(reporter->GetErrorStream());
   };
+
+  json context = GetBasicContext();
+  context["name_field_width"] = name_field_width;
 
   if (console_reporter->ReportContext(context) &&
       (!file_reporter || file_reporter->ReportContext(context))) {

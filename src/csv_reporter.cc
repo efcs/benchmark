@@ -37,7 +37,7 @@ std::vector<std::string> elements = {
     "error_occurred", "error_message"};
 }  // namespace
 
-bool CSVReporter::ReportContext(const Context& context) {
+bool CSVReporter::ReportContext(const json& context) {
   PrintBasicContext(&GetErrorStream(), context);
   return true;
 }
