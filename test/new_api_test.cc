@@ -10,7 +10,7 @@
 using namespace benchmark;
 
 static void BM_ExampleWithJSON(State &st) {
-  JSON input = st.GetInputData();
+  json input = st.GetInput();
   Counter continue_counter = input.value("previous_counter", Counter(0.0));
   for (auto _ : st) {
     // Do something
@@ -20,7 +20,7 @@ static void BM_ExampleWithJSON(State &st) {
   st["my_rate"] = Counter(st.real_time_used(), Counter::kIsRate);
 }
 BENCHMARK(BM_ExampleWithJSON)
-    ->WithData({{"name", "example1"},
+    ->WithInput({{"name", "example1"},
                 {"a", 42},
                 {"b", 101},
                 {"previous_counter", Counter(5.24)}});
@@ -28,18 +28,18 @@ BENCHMARK(BM_ExampleWithJSON)
 void test_json_data() {
   auto BenchList = FindBenchmarks("BM_ExampleWithJSON/input:example1");
   CHECK(BenchList.size() == 1);
-  JSON Res = RunBenchmark(BenchList[0], /*Report*/ true);
+  json Res = RunBenchmark(BenchList[0], /*Report*/ true);
 
   {
     CHECK(!Res.is_array());
-    JSON Run = Res.at("runs")[0];
+    json Run = Res.at("runs")[0];
     CHECK_EQ(Run.count("user_data"), 1);
-    JSON Data = Run.at("user_data");
+    json Data = Run.at("user_data");
     CHECK(Data.is_object());
     CHECK_EQ(Data.count("my_output"), 1);
-    JSON MyOutput = Data.at("my_output");
-    CHECK_EQ(MyOutput.get_at<int>("foo"), 42);
-    CHECK_EQ(MyOutput.get_at<int>("bar"), 101);
+    json MyOutput = Data.at("my_output");
+    CHECK_EQ(MyOutput.at("foo").get<int>(), 42);
+    CHECK_EQ(MyOutput.at("bar").get<int>(), 101);
     Counter C = Data.at("my_counter");
     CHECK_FLOAT_EQ(C.value, 5.24, 0.01);
     Counter R = Data.at("my_rate");

@@ -103,7 +103,7 @@ class ThreadManager {
     std::string report_label_;
     std::string error_message_;
     bool has_error_ = false;
-    json json_output = json::object_t{};
+    json  user_data = json::object_t{};
     UserCounters counters;
   };
   GUARDED_BY(GetBenchmarkMutex()) Result results;
@@ -187,7 +187,7 @@ CallbackList* GetCallbackList() {
   return &callbacks;
 }
 
-void InvokeCallbacks(CallbackKind K, JSON& J) {
+void InvokeCallbacks(CallbackKind K, json& J) {
   for (auto& CB : *GetCallbackList()) CB.second(K, J);
 }
 
@@ -429,9 +429,6 @@ json RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
 
 }  // namespace
 
-JSONPointer::JSONPointer() : ptr_(new PIMPL()) {}
-JSONPointer::JSONPointer(json J) : ptr_(new PIMPL{std::move(J)}) {}
-JSONPointer::~JSONPointer() { delete ptr_; }
 }  // namespace internal
 
 

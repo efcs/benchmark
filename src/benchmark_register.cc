@@ -134,7 +134,7 @@ std::vector<BenchmarkInstance> Benchmark::GenerateInstances() const {
   Benchmark* this_nc = const_cast<Benchmark*>(this);
   BenchmarkInfoBase* this_base = this_nc;
   auto make_instance = [&, this](std::vector<int> const& instance_args,
-                                 int num_threads, JSON const& data) {
+                                 int num_threads, json const& data) {
     BenchmarkInstance instance;
     instance.name = family_name;
     instance.benchmark = this_nc;
@@ -160,13 +160,13 @@ std::vector<BenchmarkInstance> Benchmark::GenerateInstances() const {
     }
     if (!data.is_null() && data.count("name")) {
       instance.name += "/input:";
-      instance.name += data.at("name");
+      instance.name += data.at("name").get<std::string>();
     } else if (!data.is_null()) {
       instance.name += "/with_inputs";
       CHECK(data.is_object());
       for (auto It = data.begin(); It != data.end(); ++It) {
         std::string Key = It.key();
-        JSON Value = It.value();
+        json Value = It.value();
         CHECK(Value.is_primitive());
         instance.name += "/" + Key + ":" + It.value().dump();
       }

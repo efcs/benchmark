@@ -6,7 +6,7 @@ namespace benchmark {
 
 enum JSONNodeKind { JK_Report, JK_Run, JK_ReportList };
 
-JSONNodeKind ClassifyNode(JSON const& R1) {
+JSONNodeKind ClassifyNode(json const& R1) {
   if (R1.is_array()) {
     if (R1.size() == 0) return JK_ReportList;
     CHECK_EQ(ClassifyNode(R1[0]), JK_Report);
@@ -19,7 +19,7 @@ JSONNodeKind ClassifyNode(JSON const& R1) {
     if (Kind == "normal" || Kind == "error" || Kind == "statistic")
       return JK_Run;
   }
-  std::cerr << "Unknown JSON Kind" << std::endl;
+  std::cerr << "Unknown json Kind" << std::endl;
   BENCHMARK_UNREACHABLE();
 }
 
@@ -29,48 +29,48 @@ double CalculateChange(double Old, double New) {
   return (New - Old) / std::abs(Old);
 }
 
-JSON CompareReport(JSON const& R1, JSON const& R2) {
-  JSON S1 = GetRunOrMeanStat(R1);
-  JSON S2 = GetRunOrMeanStat(R2);
+json CompareReport(json const& R1, json const& R2) {
+  json S1 = GetRunOrMeanStat(R1);
+  json S2 = GetRunOrMeanStat(R2);
   std::vector<std::string> ToCompare = {"cpu_iteration_time",
                                         "real_iteration_time"};
-  JSON Res{{"name", R1.at("name").get<std::string>() + "/compare_to/" +
+  json Res{{"name", R1.at("name").get<std::string>() + "/compare_to/" +
                         R2.at("name").get<std::string>()},
            {"kind", "comparison"},
            {"old_result", R1},
            {"new_result", R2},
-           {"comparison", JSON::object()}};
+           {"comparison", json::object()}};
   for (auto& Key : ToCompare) {
     Res["comparison"][Key] = CalculateChange(S1.at(Key), S2.at(Key));
   }
   return Res;
 }
 
-JSON FindMatchingInstance(JSON const& Instance, JSON const& Root) {
+json FindMatchingInstance(json const& Instance, json const& Root) {
   for (auto const& Item : Root) {
     if (Item.at("instance") == Instance) return Item;
   }
-  return JSON{};
+  return json{};
 }
 
-JSON CompareResults(JSON const& R1, JSON const& R2) {
+json CompareResults(json const& R1, json const& R2) {
   JSONNodeKind Kind = ClassifyNode(R1);
   CHECK_EQ(Kind, ClassifyNode(R2));
   if (Kind == JK_Report) return CompareReport(R1, R2);
   if (Kind == JK_ReportList) {
-    JSON Res = JSON::array();
+    json Res = json::array();
     for (auto It = R1.begin(); It != R1.end(); ++It) {
-      JSON Val = *It;
-      JSON Match = FindMatchingInstance(Val.at("instance"), R2);
+      json Val = *It;
+      json Match = FindMatchingInstance(Val.at("instance"), R2);
       CHECK(!Match.is_null());
-      JSON Report = CompareReport(Val, Match);
+      json Report = CompareReport(Val, Match);
       Res.push_back(Report);
     }
     return Res;
   }
   ((void)R1);
   ((void)R2);
-  JSON res;
+  json res;
   // FIXME
   return res;
 }

@@ -73,17 +73,17 @@ static void FlushStreams() {
   std::flush(GetErrorStream());
 }
 
-void PrintBasicContext(std::ostream* out, JSON const& context) {
+void PrintBasicContext(std::ostream* out, json const& context) {
   CHECK(out) << "cannot be null";
   auto &Out = *out;
 
   Out << LocalDateTimeString() << "\n";
 
-  JSON info = context.at("cpu_info");
-  int num_cpus = info.get_at<int>("num_cpus");
+  json info = context.at("cpu_info");
+  int num_cpus = info.at("num_cpus").get<int>();
   Out << "Run on (" << num_cpus << " X "
-      << (info.get_at<double>("cycles_per_second") / 1000000.0) << " MHz CPU "
-      << ((info.get_at<int>("num_cpus") > 1) ? "s" : "") << ")\n";
+      << (info.at("cycles_per_second").get<double>() / 1000000.0) << " MHz CPU "
+      << ((info.at("num_cpus").get<int>() > 1) ? "s" : "") << ")\n";
   std::vector<CPUInfo::CacheInfo> caches = info.at("caches");
   if (caches.size() != 0) {
     Out << "CPU Caches:\n";
@@ -96,7 +96,7 @@ void PrintBasicContext(std::ostream* out, JSON const& context) {
     }
   }
 
-  if (info.get_at<bool>("scaling_enabled")) {
+  if (info.at("scaling_enabled").get<bool>()) {
     Out << "***WARNING*** CPU scaling is enabled, the benchmark "
            "real time measurements may be noisy and will incur extra "
            "overhead.\n";
@@ -108,7 +108,7 @@ void PrintBasicContext(std::ostream* out, JSON const& context) {
 #endif
 }
 
-void ConsoleReporter::Initialize(const JSON& info) {
+void ConsoleReporter::Initialize(const json& info) {
   name_field_width_ = info.at("name_field_width");
   printed_header_ = false;
   prev_counters_.clear();
@@ -122,7 +122,7 @@ void ConsoleReporter::Initialize(const JSON& info) {
 #endif
 }
 
-void ConsoleReporter::PrintHeader(const JSON& run) {
+void ConsoleReporter::PrintHeader(const json& run) {
   std::string str =
       FormatString("%-*s %13s %13s %10s", static_cast<int>(name_field_width_),
                    "Benchmark", "Time", "CPU", "Iterations");
@@ -152,7 +152,7 @@ static void IgnoreColorPrint(std::ostream& out, LogColor, const char* fmt,
 
 typedef void(PrinterFn)(std::ostream&, LogColor, const char*, ...);
 
-void ConsoleReporter::Report(JSON const& result) {
+void ConsoleReporter::Report(json const& result) {
   if (result.is_array()) {
     for (auto& R : result) ReportResults(R);
   } else {
@@ -160,8 +160,8 @@ void ConsoleReporter::Report(JSON const& result) {
   }
 }
 
-void ConsoleReporter::ReportResults(JSON const& result) {
-  auto ReportSingle = [&, this](const JSON run) {
+void ConsoleReporter::ReportResults(json const& result) {
+  auto ReportSingle = [&, this](const json run) {
     // print the header:
     // --- if none was printed yet
     bool print_header = !printed_header_;
@@ -192,12 +192,12 @@ void ConsoleReporter::ReportResults(JSON const& result) {
   if (Kind == "comparison") {
     ReportSingle(result);
   } else {
-    JSON runs = result.at("runs");
+    json runs = result.at("runs");
     if (runs.size() == 1 || !result.at("report_aggregates_only").get<bool>()) {
-      for (JSON R : runs) ReportSingle(R);
+      for (json R : runs) ReportSingle(R);
     }
-    JSON stats = result.at("stats");
-    for (JSON R : stats) ReportSingle(R);
+    json stats = result.at("stats");
+    for (json R : stats) ReportSingle(R);
   }
   FlushStreams();
 }
@@ -205,13 +205,13 @@ void ConsoleReporter::ReportResults(JSON const& result) {
 static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
                            LogColor name_color,
                            ConsoleReporter::OutputOptions output_options,
-                           size_t name_field_width, const JSON& result) {
+                           size_t name_field_width, const json& result) {
   std::string Name = result.at("name");
   // std::string Kind = result.at("kind");
   printer(Out, name_color, "%-*s ", name_field_width, Name.c_str());
-  if (result.get_at<std::string>("kind") == "error") {
+  if (result.at("kind").get<std::string>() == "error") {
     printer(Out, COLOR_RED, "ERROR OCCURRED: \'%s\'",
-            result.get_at<std::string>("error_message").c_str());
+            result.at("error_message").get<std::string>().c_str());
     printer(Out, COLOR_DEFAULT, "\n");
     return;
   }
@@ -225,11 +225,11 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
           timeLabel.c_str(), cpu_time, timeLabel.c_str());
 
   if (result.count("iterations") != 0) {
-    printer(Out, COLOR_CYAN, "%10lld", result.get_at<int64_t>("iterations"));
+    printer(Out, COLOR_CYAN, "%10lld", result.at("iterations").get<int64_t>());
   }
 
   if (result.count("user_data") != 0) {
-    JSON ucounters = result.at("user_data");
+    json ucounters = result.at("user_data");
     for (auto It = ucounters.begin(); It != ucounters.end(); ++It) {
       std::string Key = It.key();
       if (Key == "items_per_second" || Key == "bytes_per_second") continue;
@@ -267,31 +267,31 @@ static void PrintNormalRun(std::ostream& Out, PrinterFn* printer,
 }
 
 static void PrintComplexityRun(std::ostream& Out, PrinterFn* printer,
-                               const JSON& result, size_t name_field_width) {
+                               const json& result, size_t name_field_width) {
   std::string Name = result.at("name");
 
   std::string BigOName = Name + "_BigO";
   printer(Out, COLOR_BLUE, "%-*s ", name_field_width, BigOName.c_str());
 
-  JSON BigO = result.at("big_o");
+  json BigO = result.at("big_o");
   std::string big_o = result["complexity_string"];
   printer(Out, COLOR_YELLOW, "%10.2f %s %10.2f %s ",
-          BigO.get_at<double>("real_time_coefficient"), big_o.c_str(),
-          BigO.get_at<double>("cpu_time_coefficient"), big_o.c_str());
+          BigO.at("real_time_coefficient").get<double>(), big_o.c_str(),
+          BigO.at("cpu_time_coefficient").get<double>(), big_o.c_str());
 
   printer(Out, COLOR_DEFAULT, "\n");
   std::string RMSName = Name + "_RMS";
   printer(Out, COLOR_BLUE, "%-*s ", name_field_width, RMSName.c_str());
 
-  JSON RMS = result.at("rms");
+  json RMS = result.at("rms");
   printer(Out, COLOR_YELLOW, "%10.0f %% %10.0f %% ",
-          RMS.get_at<double>("real_time") * 100.0,
-          RMS.get_at<double>("cpu_time") * 100.0);
+          RMS.at("real_time").get<double>() * 100.0,
+          RMS.at("cpu_time").get<double>() * 100.0);
 }
 
 static void PrintComparisonRun(std::ostream& Out, PrinterFn* printer,
                                ConsoleReporter::OutputOptions output_options,
-                               size_t name_field_width, const JSON& result) {
+                               size_t name_field_width, const json& result) {
   name_field_width = std::max(std::strlen("Comparison:"), name_field_width);
   PrintNormalRun(Out, printer, COLOR_YELLOW, output_options, name_field_width,
                  GetRunOrMeanStat(result.at("old_result")));
@@ -299,7 +299,7 @@ static void PrintComparisonRun(std::ostream& Out, PrinterFn* printer,
   PrintNormalRun(Out, printer, COLOR_YELLOW, output_options, name_field_width,
                  GetRunOrMeanStat(result.at("new_result")));
   printer(Out, COLOR_DEFAULT, "\n");
-  JSON compare = result.at("comparison");
+  json compare = result.at("comparison");
   const double real_time = compare.at("real_iteration_time");
   const double cpu_time = compare.at("cpu_iteration_time");
 
@@ -324,7 +324,7 @@ static void PrintComparisonRun(std::ostream& Out, PrinterFn* printer,
 
   // printer(Out, COLOR_YELLOW, "%10.2f %% %10.2f %% ", real_time, cpu_time);
 }
-void ConsoleReporter::PrintRunData(const JSON& result) {
+void ConsoleReporter::PrintRunData(const json& result) {
   auto& Out = GetOutputStream();
   PrinterFn* printer =
       (output_options_ & OO_Color) ? (PrinterFn*)ColorPrintf : IgnoreColorPrint;
@@ -352,7 +352,7 @@ void ConsoleReporter::PrintRunData(const JSON& result) {
   printer(Out, COLOR_DEFAULT, "\n");
 }
 
-void ReportResults(JSON const& J) {
+void ReportResults(json const& J) {
   if (J.is_array()) {
     assert(J.size() == 1);
     GetGlobalReporter()(CK_Report, J[0]);
@@ -367,7 +367,7 @@ ConsoleReporter::ConsoleReporter()
       prev_counters_(),
       printed_header_(false) {}
 
-void ConsoleReporter::operator()(CallbackKind K, JSON const& J) {
+void ConsoleReporter::operator()(CallbackKind K, json const& J) {
   switch (K) {
     case CK_Initial:
       return Initialize(J);

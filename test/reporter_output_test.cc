@@ -21,9 +21,9 @@ static int AddContextCases() {
                {"%int[-/]%int[-/]%int %int:%int:%int$", MR_Default},
                {"Run on \\(%int X %float MHz CPU s\\)", MR_Next},
            });
-  JSON Context = GetContext();
-  JSON CPUInfo = Context.at("cpu_info");
-  JSON Caches = CPUInfo.at("caches");
+  json Context = GetContext();
+  json CPUInfo = Context.at("cpu_info");
+  json Caches = CPUInfo.at("caches");
   size_t CachesSize = Caches.size();
   if (CachesSize != 0) {
     AddCases(TC_ConsoleErr, {{"CPU Caches:$", MR_Next}});

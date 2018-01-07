@@ -11,10 +11,10 @@ namespace {
 using namespace benchmark;
 
 struct ReporterCallback {
-  void operator()(CallbackKind K, JSON& J) {
+  void operator()(CallbackKind K, json& J) {
     if (K == CK_Report) all_runs_.push_back(J);
   }
-  std::vector<benchmark::JSON> all_runs_;
+  std::vector<benchmark::json> all_runs_;
 };
 
 struct TestCase {

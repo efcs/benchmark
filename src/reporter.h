@@ -5,7 +5,7 @@
 
 namespace benchmark {
 
-void PrintBasicContext(std::ostream* out, JSON const& context);
+void PrintBasicContext(std::ostream* out, json const& context);
 
 }  // namespace benchmark
 

@@ -27,8 +27,8 @@ namespace benchmark {
 
 // Return a vector containing the bigO and RMS information for the specified
 // list of reports. If 'reports.size() < 2' an empty vector is returned.
-JSON ComputeBigO(const internal::BenchmarkInstance& instance,
-                 std::vector<JSON> const& reports);
+json ComputeBigO(const internal::BenchmarkInstance& instance,
+                 std::vector<json> const& reports);
 
 // This data structure will contain the result returned by MinimalLeastSq
 //   - coef        : Estimated coeficient for the high-order term as

@@ -682,8 +682,9 @@ private:
   void SetCounter(std::string const& Key, Counter C);
   Counter GetCounter(std::string const& Key) const;
 
-#ifndef BENCHMARK_HAS_NO_JSON_HEADER
 public:
+
+#ifndef BENCHMARK_HAS_NO_JSON_HEADER
   // Return the json input specified when registering the benchmark, if any;
   // otherwise, return an empty json object.
   BENCHMARK_ALWAYS_INLINE
@@ -723,8 +724,6 @@ public:
   size_t total_iterations_;
 
   std::vector<int> range_;
-  internal::JSONPointer json_input_;
-  internal::JSONPointer json_output_;
 
   bool error_occurred_;
 

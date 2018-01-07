@@ -149,9 +149,9 @@ LeastSq MinimalLeastSq(const std::vector<int>& n,
   return best_fit;
 }
 
-JSON ComputeBigO(const internal::BenchmarkInstance& instance,
-                 std::vector<JSON> const& reports) {
-  if (reports.size() < 2) return JSON{};
+json ComputeBigO(const internal::BenchmarkInstance& instance,
+                 std::vector<json> const& reports) {
+  if (reports.size() < 2) return json{};
 
   // Accumulators.
   std::vector<int> n;
@@ -159,7 +159,7 @@ JSON ComputeBigO(const internal::BenchmarkInstance& instance,
   std::vector<double> cpu_time;
 
   // Populate the accumulators.
-  for (JSON const& Run : reports) {
+  for (json const& Run : reports) {
     // CHECK_GT(run.complexity_n, 0) << "Did you forget to call
     // SetComplexityN?";
     n.push_back(Run.at("user_data").at("complexity_n").get<int>());
@@ -188,7 +188,7 @@ JSON ComputeBigO(const internal::BenchmarkInstance& instance,
   // correct one.
   double multiplier = GetTimeUnitMultiplier(instance.info->time_unit);
 
-  JSON json_report = {
+  json json_report = {
       {"name", benchmark_name},
       {"kind", "complexity"},
       {"complexity", result_cpu.complexity},

@@ -502,19 +502,19 @@ CPUInfo::CPUInfo()
       caches(GetCacheSizes()),
       scaling_enabled(CpuScalingEnabled(num_cpus)) {}
 
-void to_json(JSON& J, CPUInfo const& D) {
-  JSON Res{{"num_cpus", D.num_cpus},
+void to_json(json& J, CPUInfo const& D) {
+  json Res{{"num_cpus", D.num_cpus},
            {"cycles_per_second", D.cycles_per_second},
            {"caches", D.caches},
            {"scaling_enabled", D.scaling_enabled}};
   J = Res;
 }
-void to_json(JSON& J, const CPUInfo::CacheInfo& CI) {
-  JSON Res{{"type", CI.type}, {"level", CI.level}, {"size", CI.size}, {"num_sharing", CI.num_sharing}};
+void to_json(json& J, const CPUInfo::CacheInfo& CI) {
+  json Res{{"type", CI.type}, {"level", CI.level}, {"size", CI.size}, {"num_sharing", CI.num_sharing}};
   J = Res;
 }
 
-void from_json(JSON const& J, CPUInfo::CacheInfo& CI) {
+void from_json(json const& J, CPUInfo::CacheInfo& CI) {
   CI.type = J.at("type");
   CI.level = J.at("level");
   CI.size = J.at("size");

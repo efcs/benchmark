@@ -13,10 +13,10 @@ struct TestCase {
   bool error_occurred;
   std::string error_message;
 
-  void CheckRun(benchmark::JSON const& json_root) const {
+  void CheckRun(benchmark::json const& json_root) const {
     CHECK(json_root.at("stats").size() == 0);
     CHECK(json_root.at("runs").size() == 1);
-    benchmark::JSON json = json_root.at("runs")[0];
+    benchmark::json json = json_root.at("runs")[0];
     std::string BName = json.at("name");
 
     CHECK(name == BName) << "expected " << name << " got " << BName;
@@ -152,11 +152,11 @@ int main(int argc, char* argv[]) {
   using namespace benchmark;
   benchmark::Initialize(&argc, argv);
   benchmark::GetGlobalReporter().EnableColor(false);
-  JSON BMList = RunBenchmarks(FindSpecifiedBenchmarks());
+  json BMList = RunBenchmarks(FindSpecifiedBenchmarks());
 
   auto EB = ExpectedResults.begin();
 
-  for (JSON::iterator It = BMList.begin(); It != BMList.end(); ++It) {
+  for (json::iterator It = BMList.begin(); It != BMList.end(); ++It) {
     assert(EB != ExpectedResults.end());
     EB->CheckRun(*It);
     ++EB;

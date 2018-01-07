@@ -32,13 +32,13 @@ BENCHMARK_NORETURN void PrintErrorAndDie(Args&&... args) {
   std::exit(EXIT_FAILURE);
 }
 
-inline JSON GetRunOrMeanStat(JSON const& R) {
+inline json GetRunOrMeanStat(json const& R) {
   if (R.at("runs").size() == 1) return R.at("runs")[0];
   std::string MeanName = R.at("name");
   MeanName += "_mean";
   CHECK(R.at("stats").size() != 0);
   for (auto It = R.at("stats").begin(); It != R.at("stats").end(); ++It) {
-    JSON Val = It.value();
+    json Val = It.value();
     std::string Name = Val.at("name");
     if (Name == MeanName) return Val;
   }

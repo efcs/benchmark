@@ -72,12 +72,12 @@ double StatisticsStdDev(const std::vector<double>& v) {
   return Sqrt(v.size() / (v.size() - 1.0) * (avg_squares - Sqr(mean)));
 }
 
-std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
+std::vector<json> ComputeStats(std::vector<json> const& reports,
                                std::vector<Statistics> const& stats) {
-  std::vector<JSON> results;
+  std::vector<json> results;
   auto error_count =
-      std::count_if(reports.begin(), reports.end(), [](JSON const& run) {
-        return run.get_at<std::string>("kind") == "error";
+      std::count_if(reports.begin(), reports.end(), [](json const& run) {
+        return run.at("kind").get<std::string>() == "error";
       });
 
   if (reports.size() - error_count < 2) {
@@ -97,7 +97,7 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
   items_per_second_stat.reserve(reports.size());
   auto check_stat = [&](std::string Key) {
     return std::all_of(reports.begin(), reports.end(),
-                       [&](JSON const& J) { return J.count(Key) == 1; });
+                       [&](json const& J) { return J.count(Key) == 1; });
   };
   bool has_bytes_per_second = check_stat("bytes_per_second");
   bool has_items_per_second = check_stat("items_per_second");
@@ -111,7 +111,7 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
     std::vector<double> s;
   };
   std::map< std::string, CounterStat > counter_stats;
-  for (JSON const& r : reports) {
+  for (json const& r : reports) {
     UserCounters UC = r.at("counters");
     for (auto const& cnt : UC) {
       auto it = counter_stats.find(cnt.first);
@@ -126,24 +126,24 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
   }
 
   // Populate the accumulators.
-  for (JSON const& run : reports) {
+  for (json const& run : reports) {
     std::string Name = run.at("name");
 
-    //  CHECK_EQ(reports[0].json_report.get_at<std::string>("name"), Name);
+    //  CHECK_EQ(reports[0].json_report.at("name").get<std::string>(), Name);
     // CHECK_EQ(run_iterations, run.iterations);
     std::string Kind = run.at("kind");
     if (Kind == "error") continue;
     real_accumulated_time_stat.emplace_back(
-        run.get_at<double>("real_accumulated_time"));
+        run.at("real_accumulated_time").get<double>());
     cpu_accumulated_time_stat.emplace_back(
-        run.get_at<double>("cpu_accumulated_time"));
+        run.at("cpu_accumulated_time").get<double>());
 
     if (has_items_per_second)
       items_per_second_stat.emplace_back(
-          run.get_at<double>("items_per_second"));
+          run.at("items_per_second").get<double>());
     if (has_bytes_per_second)
       bytes_per_second_stat.emplace_back(
-          run.get_at<double>("bytes_per_second"));
+          run.at("bytes_per_second").get<double>());
 
     // user counters
     UserCounters UC = run["counters"];
@@ -155,7 +155,7 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
   }
 
   // Only add label if it is same for all runs
-  auto GetLabel = [](JSON const& R) {
+  auto GetLabel = [](json const& R) {
     std::string res;
     if (R.count("label") != 0) res = R.at("label");
     return res;
@@ -171,18 +171,18 @@ std::vector<JSON> ComputeStats(std::vector<JSON> const& reports,
 
   for (const auto& Stat : stats) {
     // Get the data from the accumulator to BenchmarkReporter::Run's.
-    JSON data = {
-        {"name", reports[0].get_at<std::string>("name") + "_" + Stat.name_},
+    json data = {
+        {"name", reports[0].at("name").get<std::string>() + "_" + Stat.name_},
         {"kind", "statistic"},
         {"label", report_label},
         {"iterations", run_iterations},
-        {"time_unit", reports[0].get_at<std::string>("time_unit")},
+        {"time_unit", reports[0].at("time_unit").get<std::string>()},
         {"real_accumulated_time", Stat.compute_(real_accumulated_time_stat)},
         {"cpu_accumulated_time", Stat.compute_(cpu_accumulated_time_stat)}};
     data["real_iteration_time"] =
-        data.get_at<double>("real_accumulated_time") / run_iterations;
+        data.at("real_accumulated_time").get<double>() / run_iterations;
     data["cpu_iteration_time"] =
-        data.get_at<double>("cpu_accumulated_time") / run_iterations;
+        data.at("cpu_accumulated_time").get<double>() / run_iterations;
     if (has_bytes_per_second)
       data["bytes_per_second"] = Stat.compute_(bytes_per_second_stat);
     if (has_items_per_second)

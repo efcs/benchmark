@@ -24,9 +24,9 @@ struct CPUInfo {
  private:
   CPUInfo();
 
-  friend void to_json(JSON& J, CPUInfo const& D);
-  friend void to_json(JSON& J, const CacheInfo& CI);
-  friend void from_json(JSON const& J, CacheInfo& CI);
+  friend void to_json(json& J, CPUInfo const& D);
+  friend void to_json(json& J, const CacheInfo& CI);
+  friend void from_json(json const& J, CacheInfo& CI);
 
   BENCHMARK_DISALLOW_COPY_AND_ASSIGN(CPUInfo);
 };

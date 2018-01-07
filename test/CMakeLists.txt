@@ -125,8 +125,8 @@ endif()
 compile_output_test(complexity_test)
 add_test(complexity_benchmark complexity_test --benchmark_min_time=${COMPLEXITY_MIN_TIME})
 
-compile_benchmark_test(disable_json_test)
-add_test(disable_json disable_json_test)
+#compile_benchmark_test(disable_json_test)
+#add_test(disable_json disable_json_test)
 ###############################################################################
 # GoogleTest Unit Tests
 ###############################################################################
