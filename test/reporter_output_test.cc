@@ -249,6 +249,7 @@ ADD_CASES(TC_ConsoleOut, {{"^BM_UserStats/repeats:3 %console_report$"},
                           {"^BM_UserStats/repeats:3_median %console_report$"},
                           {"^BM_UserStats/repeats:3_stddev %console_report$"},
                           {"^BM_UserStats/repeats:3_ %console_report$"}});
+
 // ========================================================================= //
 // --------------------------- TEST CASES END ------------------------------ //
 // ========================================================================= //

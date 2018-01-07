@@ -2,6 +2,7 @@
 [![Build Status](https://travis-ci.org/google/benchmark.svg?branch=master)](https://travis-ci.org/google/benchmark)
 [![Build status](https://ci.appveyor.com/api/projects/status/u0qsyp7t1tk7cpxs/branch/master?svg=true)](https://ci.appveyor.com/project/google/benchmark/branch/master)
 [![Coverage Status](https://coveralls.io/repos/google/benchmark/badge.svg)](https://coveralls.io/r/google/benchmark)
+[![slackin](https://slackin-iqtfqnpzxd.now.sh/badge.svg)](https://slackin-iqtfqnpzxd.now.sh/)
 
 A library to support the benchmarking of functions, similar to unit-tests.
 
@@ -12,6 +13,79 @@ IRC channel: https://freenode.net #googlebenchmark
 [Known issues and common problems](#known-issues)
 
 [Additional Tooling Documentation](docs/tools.md)
+
+
+## Building
+
+The basic steps for configuring and building the library look like this:
+
+```bash
+$ git clone https://github.com/google/benchmark.git
+# Benchmark requires GTest as a dependency. Add the source tree as a subdirectory.
+$ git clone https://github.com/google/googletest.git benchmark/googletest
+$ mkdir build && cd build
+$ cmake -G <generator> [options] ../benchmark
+# Assuming a makefile generator was used
+$ make
+```
+
+Note that Google Benchmark requires GTest to build and run the tests. This
+dependency can be provided three ways:
+
+* Checkout the GTest sources into `benchmark/googletest`.
+* Otherwise, if `-DBENCHMARK_DOWNLOAD_DEPENDENCIES=ON` is specified during
+  configuration, the library will automatically download and build any required
+  dependencies.
+* Otherwise, if nothing is done, CMake will use `find_package(GTest REQUIRED)`
+  to resolve the required GTest dependency.
+
+If you do not wish to build and run the tests, add `-DBENCHMARK_ENABLE_GTEST_TESTS=OFF`
+to `CMAKE_ARGS`.
+
+
+## Installation Guide
+
+For Ubuntu and Debian Based System
+
+First make sure you have git and cmake installed (If not please install it)
+
+```
+sudo apt-get install git
+sudo apt-get install cmake
+```
+
+Now, let's clone the repository and build it
+
+```
+git clone https://github.com/google/benchmark.git
+cd benchmark
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=RELEASE
+make
+```
+
+We need to install the library globally now
+
+```
+sudo make install
+```
+
+Now you have google/benchmark installed in your machine 
+Note: Don't forget to link to pthread library while building
+
+## Stable and Experimental Library Versions
+
+The main branch contains the latest stable version of the benchmarking library;
+the API of which can be considered largely stable, with source breaking changes
+being made only upon the release of a new major version.
+
+Newer, experimental, features are implemented and tested on the
+[`v2` branch](https://github.com/google/benchmark/tree/v2). Users who wish
+to use, test, and provide feedback on the new features are encouraged to try
+this branch. However, this branch provides no stability guarantees and reserves
+the right to change and break the API at any time.
+
 
 ## Example usage
 ### Basic usage
@@ -113,6 +187,23 @@ pair.
 
 ```c++
 BENCHMARK(BM_SetInsert)->Ranges({{1<<10, 8<<10}, {128, 512}});
+```
+
+### Specifying JSON Input Arguments.
+Benchmarks can also accept arbitrary JSON arguments as input using the `WithInput`
+function. See [Working With JSON Objects for more information](#working-with-json-objects).
+
+```c++
+BENCHMARK(BM_Foo)
+->WithInput({
+  {"name", "case1"},
+  {"size", 42},
+  {"input_list", {1, 2, 3, 4}}
+})
+->WithInput({
+  {"name", "case2"},
+  {"use_random_size", true}
+});
 ```
 
 For more complex patterns of inputs, passing a custom function to `Apply` allows
@@ -727,6 +818,46 @@ BM_memcpy/32          12 ns         12 ns   54687500
 BM_memcpy/32k       1834 ns       1837 ns     357143
 ```
 
+## Working with JSON Objects
+
+The benchmark library uses JSON as it's primary input and output format. Specifically
+Google benchmark uses [nlohmann's JSON library](https://github.com/nlohmann/json),
+except with the `nlohmann` namespace changed into `benchmark` to avoid conflict
+with other external users of the header.
+
+For examples and in-depth documentation about using the JSON library, please
+refer to the [original documentation](https://github.com/nlohmann/json#examples).
+
+Because compiling the JSON header can be quite slow, Google Benchmark provides
+the option `BENCHMARK_HAS_NO_JSON_HEADER` which can be defined to to disable
+including it when building benchmarks. However, this also disables usage
+of all API's which traffic in json types.
+
+## Reporting Arbitrary Benchmark Results using JSON.
+
+The benchmark library allows benchmarks to report arbitrary user output as JSON
+using `State::operator[](const std::string &)`. For example:
+
+```c++
+void BM_JSONOutput(benchmark::State& st) {
+  int my_count = 0;
+  bool saw_failure = false;
+  std::vector<int> inputs = GenerateInputs();
+  for (auto _ : st) {
+    /* ... */
+  }
+  st["my_count"] = my_count;
+  st["saw_failure"] = saw_failure;
+  st["inputs"] = inputs;
+}
+```
+
+Currently, only the JSON reporter displays custom user output; but this will
+be fixed in future revisions. Additionally, future revisions will allow
+user counters to be represented and reported using the JSON interface.
+
+Additionally, for multi-threaded benchmarks, if two threads report a field
+with the same name, the first reported value will be chosen.
 
 ## Output Formats
 The library supports multiple output formats. Use the
@@ -815,6 +946,9 @@ To enable link-time optimisation, use
 cmake -DCMAKE_BUILD_TYPE=Release -DBENCHMARK_ENABLE_LTO=true
 ```
 
+If you are using gcc, you might need to set `GCC_AR` and `GCC_RANLIB` cmake cache variables, if autodetection fails.
+If you are using clang, you may need to set `LLVMAR_EXECUTABLE`, `LLVMNM_EXECUTABLE` and `LLVMRANLIB_EXECUTABLE` cmake cache variables.
+
 ## Linking against the library
 When using gcc, it is necessary to link against pthread to avoid runtime exceptions.
 This is due to how gcc implements std::thread.
@@ -827,9 +961,9 @@ a modern C++ toolchain, both compiler and standard library.
 
 The following minimum versions are strongly recommended build the library:
 
-* GCC 4.8
+* GCC 4.9
 * Clang 3.4
-* Visual Studio 2013
+* Visual Studio 2015
 * Intel 2015 Update 1
 
 Anything older *may* work.

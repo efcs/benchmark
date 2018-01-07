@@ -185,7 +185,14 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #include <system_error>
 #include <type_traits>
 #include <utility>
-#include "json.h"
+#else
+#ifndef BENCHMARK_HAS_NO_JSON_HEADER
+#define BENCHMARK_HAS_NO_JSON_HEADER
+#endif
+#endif
+
+#if !defined(BENCHMARK_HAS_NO_JSON_HEADER)
+#include "json.hpp"
 #endif
 
 #if defined(_MSC_VER)
@@ -242,12 +249,6 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #endif
 
 namespace benchmark {
-
-#ifdef BENCHMARK_HAS_CXX11
-namespace json_ns = nlohmann;
-using JSON = json_ns::json;
-#endif
-
 
 void Initialize(int* argc, char** argv);
 
@@ -311,7 +312,51 @@ class BenchmarkInstance;
 // TODO(dominic)
 // void MemoryUsage();
 
+#ifndef BENCHMARK_HAS_NO_JSON_HEADER
+using json = nlohmann::json;
+#endif
+
 namespace internal {
+
+/// This class allows objects to store references to json object even
+/// when the header is not currently available. Technically this class
+/// causes ODR violations, but it's unlikely to cause problems.
+class JSONPointer {
+ public:
+  JSONPointer();
+  ~JSONPointer();
+#ifndef BENCHMARK_HAS_NO_JSON_HEADER
+  explicit JSONPointer(json J);
+  inline JSONPointer(JSONPointer&& JP) noexcept;
+  inline JSONPointer& operator=(JSONPointer&& JP) noexcept;
+  inline json& get() const;
+  inline json* operator->() const;
+  json& operator*() const { return get(); }
+#endif
+ private:
+  struct PIMPL;
+  PIMPL* ptr_;
+#ifndef BENCHMARK_HAS_CXX11
+  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(JSONPointer);
+#endif
+};
+
+#ifndef BENCHMARK_HAS_NO_JSON_HEADER
+struct JSONPointer::PIMPL {
+  json value;
+};
+inline JSONPointer::JSONPointer(JSONPointer&& JP) noexcept : ptr_(JP.ptr_) {
+  JP.ptr_ = nullptr;
+}
+inline JSONPointer& JSONPointer::operator=(JSONPointer&& JP) noexcept {
+  PIMPL* tmp = ptr_;
+  ptr_ = JP.ptr_;
+  JP.ptr_ = tmp;
+  return *this;
+}
+inline json& JSONPointer::get() const { return ptr_->value; }
+inline json* JSONPointer::operator->() const { return &ptr_->value; }
+#endif  // BENCHMARK_HAS_NO_JSON_HEADER
 
 void UseCharPointer(char const volatile*);
 
@@ -400,8 +445,8 @@ public:
 typedef std::map<std::string, Counter> UserCounters;
 
 #ifdef BENCHMARK_HAS_CXX11
-void to_json(JSON& j, const Counter& C);
-void from_json(const JSON& j, Counter& C);
+void to_json(json& j, const Counter& C);
+void from_json(const json& j, Counter& C);
 #endif
 
 // TimeUnit is passed to a benchmark in order to specify the order of magnitude
@@ -468,43 +513,6 @@ enum ReportMode
   RM_ReportAggregatesOnly
 };
 
-class JSONPointer {
- public:
-  JSONPointer();
-  ~JSONPointer();
-#ifdef BENCHMARK_HAS_CXX11
-  explicit JSONPointer(JSON J);
-  inline JSONPointer(JSONPointer&& JP) noexcept;
-  inline JSONPointer& operator=(JSONPointer&& JP) noexcept;
-  inline JSON& get() const;
-  inline JSON* operator->() const;
-  JSON& operator*() const { return get(); }
-#endif
- private:
-  struct PIMPL;
-  PIMPL* ptr_;
-#ifndef BENCHMARK_HAS_CXX11
-  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(JSONPointer);
-#endif
-};
-
-#ifdef BENCHMARK_HAS_CXX11
-struct JSONPointer::PIMPL {
-  JSON value;
-};
-inline JSONPointer::JSONPointer(JSONPointer&& JP) noexcept : ptr_(JP.ptr_) {
-  JP.ptr_ = nullptr;
-}
-inline JSONPointer& JSONPointer::operator=(JSONPointer&& JP) noexcept {
-  PIMPL* tmp = ptr_;
-  ptr_ = JP.ptr_;
-  JP.ptr_ = tmp;
-  return *this;
-}
-inline JSON& JSONPointer::get() const { return ptr_->value; }
-inline JSON* JSONPointer::operator->() const { return &ptr_->value; }
-
-#endif
 
 }  // namespace internal
 
@@ -670,35 +678,29 @@ class State {
     this->SetLabel(str.c_str());
   }
 
-#ifdef BENCHMARK_HAS_CXX11
- private:
-  JSON& GetJSONRef() { return json_output_.get(); }
-
- public:
-  const JSON& GetJSON() const { return json_output_.get(); }
-  void WithData(JSON Data) {
-    for (auto It = Data.begin(); It != Data.end(); ++It)
-      GetJSONRef()[It.key()] = It.value();
-  }
-
-  JSON::reference operator[](std::string const& Key) {
-    return GetJSONRef()[Key];
-  }
-
-  void SetData(std::string const& Key, JSON Value) {
-    GetJSONRef()[Key] = Value;
-  }
-  JSON::const_reference GetData(std::string const& Key) const {
-    return GetJSON().at(Key);
-  }
-
-  JSON const& GetInputData() const { return json_input_.get(); }
-#endif
- private:
+private:
   void SetCounter(std::string const& Key, Counter C);
   Counter GetCounter(std::string const& Key) const;
 
- public:
+#ifndef BENCHMARK_HAS_NO_JSON_HEADER
+public:
+  // Return the json input specified when registering the benchmark, if any;
+  // otherwise, return an empty json object.
+  BENCHMARK_ALWAYS_INLINE
+  json::const_reference GetInput() const { return json_input_.get(); }
+
+  // Return the json object which is used to store output from running the
+  // benchmark.
+  json::const_reference GetOutput() const { return json_output_.get(); }
+
+  // Get or create a json object with the specified key and return a reference
+  // to that object. This can be used to specify arbitrary json output which
+  // will be reported by the json reporter.
+  json::reference operator[](json::object_t::key_type const& key) {
+    return json_output_.get()[key];
+  }
+#endif
+
   // Range arguments for this run. CHECKs if the argument has been set.
   BENCHMARK_ALWAYS_INLINE
   int range(std::size_t pos = 0) const {
@@ -721,6 +723,8 @@ class State {
   size_t total_iterations_;
 
   std::vector<int> range_;
+  internal::JSONPointer json_input_;
+  internal::JSONPointer json_output_;
 
   bool error_occurred_;
 
@@ -734,9 +738,11 @@ class State {
   const size_t max_iterations;
 
   // TODO(EricWF) make me private
+
   State(size_t max_iters, const std::vector<int>& ranges, int thread_i,
         int n_threads, internal::ThreadTimer* timer,
         internal::ThreadManager* manager, internal::JSONPointer json_input);
+
 
  private:
   void StartKeepRunning();
@@ -835,7 +841,7 @@ class BenchmarkInstance {
   const BenchmarkInfoBase* info;
   std::vector<int> arg;
   int threads;  // Number of concurrent threads to us
-  JSON input_data;
+  json input_data;
   bool last_benchmark_instance;
 };
 #endif
@@ -997,14 +1003,22 @@ class Benchmark : protected BenchmarkInfoBase {
   // Equivalent to ThreadRange(NumCPUs(), NumCPUs())
   Benchmark* ThreadPerCpu();
 
-#ifdef BENCHMARK_HAS_CXX11
-  Benchmark* WithData(JSON data);
 
-  // Generate all BenchmarkInstance's for this benchmark.
-  std::vector<BenchmarkInstance> GenerateInstances() const;
+#ifndef BENCHMARK_HAS_NO_JSON_HEADER
+  // Run this benchmark once with "input_value" as the extra arguments passed
+  // to the function, which can be accessed using 'State::GetInput()'.
+  //
+  // The name of the benchmark for the specified input value will be appended
+  // with "/<name>" if the input contains a "name" field; otherwise each of
+  // the fields will be appended as "/<key>:<value>" when value is a primitive,
+  // and "/<key>" otherwise.
+  Benchmark* WithInput(json input_value);
 #endif
 
   virtual void Run(State& state) = 0;
+
+  // Generate all BenchmarkInstance's for this benchmark.
+  std::vector<BenchmarkInstance> GenerateInstances() const;
 
  protected:
   explicit Benchmark(const char* name);
@@ -1061,15 +1075,15 @@ BenchmarkInstanceList FindSpecifiedBenchmarks();
 BenchmarkInstanceList FindBenchmarks(std::string const& Regex,
                                      ErrorCode* EC = nullptr);
 
-JSON RunBenchmark(internal::BenchmarkInstance const& I,
+json RunBenchmark(internal::BenchmarkInstance const& I,
                   bool ReportConsole = false);
-JSON RunBenchmarks(BenchmarkInstanceList const&, bool ReportConsole = false);
+json RunBenchmarks(BenchmarkInstanceList const&, bool ReportConsole = false);
 
-inline JSON RunBenchmark(internal::Benchmark* BM) {
+inline json RunBenchmark(internal::Benchmark* BM) {
   return RunBenchmarks(BM->GenerateInstances(), false);
 }
 
-inline JSON RunBenchmarks(std::vector<internal::Benchmark*> L) {
+inline json RunBenchmarks(std::vector<internal::Benchmark*> L) {
   BenchmarkInstanceList IL;
   for (auto* Inst : L) {
     auto NL = Inst->GenerateInstances();
@@ -1078,14 +1092,14 @@ inline JSON RunBenchmarks(std::vector<internal::Benchmark*> L) {
   return RunBenchmarks(IL, false);
 }
 
-JSON CompareResults(JSON const& R1, JSON const& R2);
+json CompareResults(json const& R1, json const& R2);
 
-JSON GetContext();
-void ReportResults(JSON const& Res);
+json GetContext();
+void ReportResults(json const& Res);
 
 enum CallbackKind { CK_Initial, CK_Context, CK_Report, CK_Final };
 
-using CallbackType = std::function<void(CallbackKind, JSON&)>;
+using CallbackType = std::function<void(CallbackKind, json&)>;
 using CallbackList = std::vector<CallbackType>;
 int RegisterCallback(CallbackType CB);
 bool RemoveCallback(int ID);
@@ -1114,14 +1128,14 @@ class ConsoleReporter {
           static_cast<OutputOptions>(output_options_ & (~OO_Color));
   }
 
-  void Report(JSON const&);
-  void operator()(CallbackKind K, JSON const& J);
+  void Report(json const&);
+  void operator()(CallbackKind K, json const& J);
 
  private:
-  void Initialize(const JSON& init_info);
-  void ReportResults(const JSON& result);
-  void PrintRunData(const JSON& report);
-  void PrintHeader(const JSON& report);
+  void Initialize(const json& init_info);
+  void ReportResults(const json& result);
+  void PrintRunData(const json& report);
+  void PrintHeader(const json& report);
 
  private:
   OutputOptions output_options_;
@@ -1419,6 +1433,7 @@ class Fixture : public internal::Benchmark {
     ::benchmark::Initialize(&argc, argv);  \
     if (::benchmark::ReportUnrecognizedArguments(argc, argv)) return 1; \
     ::benchmark::RunSpecifiedBenchmarks(); \
-  }
+  }                                        \
+  int main(int, char**)
 
 #endif  // BENCHMARK_BENCHMARK_H_

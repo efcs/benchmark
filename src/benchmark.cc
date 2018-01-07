@@ -57,6 +57,17 @@ static const size_t kMaxIterations = 1000000000;
 
 namespace internal {
 
+void UseCharPointer(char const volatile*) {}
+
+JSONPointer::JSONPointer() : JSONPointer(json::object_t{}) {}
+
+JSONPointer::JSONPointer(json val)
+    : ptr_(new JSONPointer::PIMPL{std::move(val)}) {}
+
+JSONPointer::~JSONPointer() {
+  if (ptr_) delete ptr_;
+}
+
 class ThreadManager {
  public:
   ThreadManager(int num_threads)
@@ -92,7 +103,8 @@ class ThreadManager {
     std::string report_label_;
     std::string error_message_;
     bool has_error_ = false;
-    JSON user_data = JSON::object();
+    json json_output = json::object_t{};
+    UserCounters counters;
   };
   GUARDED_BY(GetBenchmarkMutex()) Result results;
 
@@ -198,12 +210,12 @@ void ClearCallbacks() { GetCallbackList()->clear(); }
 
 namespace {
 
-static void JoinUserData(JSON& Dest, JSON const& New) {
+static void JoinUserData(json& Dest, json const& New) {
   if (New.is_null()) return;
   CHECK(New.is_object());
   for (auto It = New.begin(); It != New.end(); ++It) {
     std::string Key = It.key();
-    JSON Value = It.value();
+    json Value = It.value();
     if (Dest.count(Key) == 0) {
       Dest[Key] = Value;
     } else if (New.value("kind", std::string{}) == "counter") {
@@ -212,14 +224,14 @@ static void JoinUserData(JSON& Dest, JSON const& New) {
       X.value += Y.value;
       Dest[Key] = X;
     } else if (New.count("patch_on_join") != 0) {
-      JSON to_patch = {{"to", Dest.at(Key)}, {"from", New}};
+      json to_patch = {{"to", Dest.at(Key)}, {"from", New}};
       to_patch.patch(New.at("patch_on_join"));
       Dest[Key] = to_patch.at("to");
     }
   }
 }
 
-JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
+json CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
                      const internal::ThreadManager::Result& results,
                      size_t iters, double seconds) {
   // Create report about this benchmark run.
@@ -227,10 +239,10 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
   // Report the total iterations across all threads.
   int64_t iterations = static_cast<int64_t>(iters) * b.threads;
 
-  JSON json_report = {{"name", b.name},
+  json json_report = {{"name", b.name},
                       {"kind", results.has_error_ ? "error" : "normal"},
                       {"iterations", static_cast<int64_t>(iters) * b.threads},
-                      {"user_data", JSON::object()}};
+                      {"user_data", json::object()}};
   if (!results.report_label_.empty())
     json_report["label"] = results.report_label_;
   if (results.has_error_) json_report["error_message"] = results.error_message_;
@@ -254,9 +266,9 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
 
     // report.statistics = b.statistics;
 
-    JSON user_data = results.user_data;
+    json user_data = results.user_data;
     for (auto It = user_data.begin(); It != user_data.end(); ++It) {
-      JSON::reference J = It.value();
+      json::reference J = It.value();
       if (J.value("kind", std::string{}) == "counter") {
         Counter C = J;
         J.at("value") = internal::Finish(C, seconds, b.threads);
@@ -273,29 +285,31 @@ JSON CreateRunReport(const benchmark::internal::BenchmarkInstance& b,
 void RunInThread(const benchmark::internal::BenchmarkInstance* b, size_t iters,
                  int thread_id, internal::ThreadManager* manager) {
   internal::ThreadTimer timer;
+
   State st(iters, b->arg, thread_id, b->threads, &timer, manager,
            JSONPointer(b->input_data));
+
   b->benchmark->Run(st);
   CHECK(st.iterations() == st.max_iterations)
       << "Benchmark returned before State::KeepRunning() returned false!";
   {
     MutexLock l(manager->GetBenchmarkMutex());
-    JSON res = st.GetJSON();
+    json res = st.GetOutput();
     internal::ThreadManager::Result& results = manager->results;
     results.cpu_time_used += timer.cpu_time_used();
     results.real_time_used += timer.real_time_used();
     results.manual_time_used += timer.manual_time_used();
-    JSON Counters = st.counters;
-    JoinUserData(results.user_data, st.GetJSON());
+    json Counters = st.counters;
+    JoinUserData(results.user_data, st.GetOutput());
     JoinUserData(results.user_data, Counters);
   }
   manager->NotifyThreadComplete();
 }
 
-JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
-                           std::vector<JSON>* complexity_reports) {
-  std::vector<JSON> run_reports;
-  std::vector<JSON> internal_complexity_reports;
+json RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
+                           std::vector<json>* complexity_reports) {
+  std::vector<json> run_reports;
+  std::vector<json> internal_complexity_reports;
   if (complexity_reports == nullptr)
     complexity_reports = &internal_complexity_reports;
   const bool has_explicit_iteration_count = b.info->iterations != 0;
@@ -357,7 +371,7 @@ JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
               !b.info->use_manual_time);
 
       if (should_report) {
-        JSON report = CreateRunReport(b, results, iters, seconds);
+        json report = CreateRunReport(b, results, iters, seconds);
         bool IsError = report.at("kind").get<std::string>() == "error";
         if (!IsError && b.info->complexity != oNone)
           complexity_reports->push_back(report);
@@ -400,10 +414,10 @@ JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
            ? FLAGS_benchmark_report_aggregates_only
            : b.info->report_mode == internal::RM_ReportAggregatesOnly);
 
-  JSON instance_info{
+  json instance_info{
       {"args", b.arg}, {"threads", b.threads}, {"repetitions", repeats}};
   if (has_explicit_iteration_count) instance_info["iterations"] = iters;
-  JSON reports_json = {{"name", b.name},
+  json reports_json = {{"name", b.name},
                        {"family", b.info->family_name},
                        {"instance", instance_info},
                        {"kind", "normal"},
@@ -416,9 +430,10 @@ JSON RunSingleBenchmarkImp(const benchmark::internal::BenchmarkInstance& b,
 }  // namespace
 
 JSONPointer::JSONPointer() : ptr_(new PIMPL()) {}
-JSONPointer::JSONPointer(JSON J) : ptr_(new PIMPL{std::move(J)}) {}
+JSONPointer::JSONPointer(json J) : ptr_(new PIMPL{std::move(J)}) {}
 JSONPointer::~JSONPointer() { delete ptr_; }
 }  // namespace internal
+
 
 State::State(size_t max_iters, const std::vector<int>& ranges, int thread_i,
              int n_threads, internal::ThreadTimer* timer,
@@ -494,11 +509,11 @@ void State::FinishKeepRunning() {
 }
 
 void State::SetCounter(std::string const& Key, Counter C) {
-  GetJSONRef()[Key] = C;
+  (*this)[Key] = C;
 }
 
 Counter State::GetCounter(std::string const& Key) const {
-  Counter C = GetJSON().at(Key);
+  Counter C = json_output_.get().at(Key);
   return C;
 }
 
@@ -509,7 +524,7 @@ double State::real_time_used() const { return timer_->real_time_used(); }
 namespace internal {
 namespace {
 
-JSON GetNameAndStatFieldWidths(
+json GetNameAndStatFieldWidths(
     const std::vector<BenchmarkInstance>& benchmarks) {
   // Determine the width of the name field using a minimum width of 10.
   bool has_repetitions = FLAGS_benchmark_repetitions > 1;
@@ -524,7 +539,7 @@ JSON GetNameAndStatFieldWidths(
       stat_field_width = std::max<size_t>(stat_field_width, Stat.name_.size());
   }
   if (has_repetitions) name_field_width += 1 + stat_field_width;
-  JSON res{{"name_field_width", name_field_width},
+  json res{{"name_field_width", name_field_width},
            {"stat_field_width", stat_field_width}};
   return res;
 }
@@ -537,34 +552,34 @@ void DisplayContextOnce() {
 }  // end namespace
 }  // end namespace internal
 
-JSON GetContext() {
+json GetContext() {
 #if defined(NDEBUG)
   const char build_type[] = "release";
 #else
   const char build_type[] = "debug";
 #endif
   // Print header here
-  JSON context{
+  json context{
       {"date", LocalDateTimeString()},
       {"library_build_type", build_type},
       {"cpu_info", CPUInfo::Get()}};
   return context;
 }
 
-JSON RunBenchmarks(const std::vector<internal::BenchmarkInstance>& benchmarks,
+json RunBenchmarks(const std::vector<internal::BenchmarkInstance>& benchmarks,
                    bool ReportConsole) {
   internal::DisplayContextOnce();
-  auto invokeAllCallbacks = [&](CallbackKind K, JSON& J) {
+  auto invokeAllCallbacks = [&](CallbackKind K, json& J) {
     internal::InvokeCallbacks(K, J);
     if (ReportConsole) GetGlobalReporter()(K, J);
   };
-  JSON initial_info = internal::GetNameAndStatFieldWidths(benchmarks);
+  json initial_info = internal::GetNameAndStatFieldWidths(benchmarks);
   invokeAllCallbacks(CK_Initial, initial_info);
 
-  std::vector<JSON> complexity_reports;
-  JSON benchmark_res = JSON::array();
+  std::vector<json> complexity_reports;
+  json benchmark_res = json::array();
   for (const auto& benchmark : benchmarks) {
-    JSON report =
+    json report =
         internal::RunSingleBenchmarkImp(benchmark, &complexity_reports);
     invokeAllCallbacks(CK_Report, report);
     benchmark_res.push_back(report);
@@ -574,19 +589,19 @@ JSON RunBenchmarks(const std::vector<internal::BenchmarkInstance>& benchmarks,
   return benchmark_res;
 }
 
-JSON RunBenchmark(internal::BenchmarkInstance const& I, bool ReportConsole) {
+json RunBenchmark(internal::BenchmarkInstance const& I, bool ReportConsole) {
   internal::DisplayContextOnce();
-  auto invokeAllCallbacks = [&](CallbackKind K, JSON& J) {
+  auto invokeAllCallbacks = [&](CallbackKind K, json& J) {
     internal::InvokeCallbacks(K, J);
     if (ReportConsole) GetGlobalReporter()(K, J);
   };
 
   std::vector<internal::BenchmarkInstance> V;
   V.push_back(I);
-  JSON initial_info = internal::GetNameAndStatFieldWidths(V);
+  json initial_info = internal::GetNameAndStatFieldWidths(V);
   invokeAllCallbacks(CK_Initial, initial_info);
 
-  JSON Res = internal::RunSingleBenchmarkImp(I, nullptr);
+  json Res = internal::RunSingleBenchmarkImp(I, nullptr);
   invokeAllCallbacks(CK_Report, Res);
 
   invokeAllCallbacks(CK_Final, Res);
@@ -618,7 +633,7 @@ size_t RunSpecifiedBenchmarks() {
     return benchmarks.size();
   }
 
-  JSON Res = RunBenchmarks(benchmarks, /*ReportConsole*/ true);
+  json Res = RunBenchmarks(benchmarks, /*ReportConsole*/ true);
   // If --benchmark_out=<fname> is specified, write the final results to it.
   if (!FLAGS_benchmark_out.empty()) {
     std::ofstream output_file;
@@ -628,7 +643,7 @@ size_t RunSpecifiedBenchmarks() {
                        << std::endl;
       std::exit(1);
     }
-    JSON full_res{{"context", GetContext()}, {"benchmarks", Res}};
+    json full_res{{"context", GetContext()}, {"benchmarks", Res}};
     output_file << std::setw(2) << full_res << std::endl;
   }
 

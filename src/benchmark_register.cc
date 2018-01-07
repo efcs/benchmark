@@ -158,7 +158,6 @@ std::vector<BenchmarkInstance> Benchmark::GenerateInstances() const {
       instance.name += StringPrintF("%d", arg);
       ++arg_i;
     }
-
     if (!data.is_null() && data.count("name")) {
       instance.name += "/input:";
       instance.name += data.at("name");
@@ -286,7 +285,7 @@ void Benchmark::AddRange(std::vector<int>* dst, int lo, int hi, int mult) {
   }
 }
 
-Benchmark* Benchmark::WithData(JSON Data) {
+Benchmark* Benchmark::WithInput(json Data) {
   user_data.emplace_back(std::move(Data));
   return this;
 }
@@ -474,7 +473,9 @@ Benchmark* Benchmark::ThreadPerCpu() {
   return this;
 }
 
+
 void Benchmark::SetName(const char* xname) { family_name = xname; }
+
 
 int Benchmark::ArgsCnt() const {
   if (args.empty()) {
