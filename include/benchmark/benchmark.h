@@ -405,7 +405,7 @@ typedef std::map<std::string, Counter> UserCounters;
 
 // TimeUnit is passed to a benchmark in order to specify the order of magnitude
 // for the measured time.
-enum TimeUnit { kNanosecond, kMicrosecond, kMillisecond };
+enum TimeUnit { kPicosecond, kNanosecond, kMicrosecond, kMillisecond };
 
 // BigO is passed to a benchmark in order to specify the asymptotic
 // computational
@@ -1519,6 +1519,8 @@ inline const char* GetTimeUnitString(TimeUnit unit) {
       return "us";
     case kNanosecond:
       return "ns";
+  case kPicosecond:
+      return "ps";
   }
   BENCHMARK_UNREACHABLE();
 }
@@ -1531,6 +1533,8 @@ inline double GetTimeUnitMultiplier(TimeUnit unit) {
       return 1e6;
     case kNanosecond:
       return 1e9;
+  case kPicosecond:
+    return 1e12;
   }
   BENCHMARK_UNREACHABLE();
 }

@@ -47,11 +47,13 @@ SubMap& GetSubstitutions() {
       {"%time", "[ ]*[0-9]{1,6} ns"},
       {"%console_report", "[ ]*[0-9]{1,6} ns [ ]*[0-9]{1,6} ns [ ]*[0-9]+"},
       {"%console_us_report", "[ ]*[0-9] us [ ]*[0-9] us [ ]*[0-9]+"},
+      {"%console_ps_report", "[ ]*[0-9]{1,10} ps [ ]*[0-9]{1,10} ps [ ]*[0-9]+"},
       {"%csv_header",
        "name,iterations,real_time,cpu_time,time_unit,bytes_per_second,"
        "items_per_second,label,error_occurred,error_message"},
       {"%csv_report", "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ns,,,,,"},
       {"%csv_us_report", "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",us,,,,,"},
+      {"%csv_ps_report", "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ps,,,,,"},
       {"%csv_bytes_report",
        "[0-9]+," + safe_dec_re + "," + safe_dec_re + ",ns," + safe_dec_re + ",,,,"},
       {"%csv_items_report",

@@ -428,11 +428,15 @@ BENCHMARK(BM_RepeatTimeUnit)
     ->Repetitions(3)
     ->ReportAggregatesOnly()
     ->Unit(benchmark::kMicrosecond);
+BENCHMARK(BM_RepeatTimeUnit)
+    ->Unit(benchmark::kPicosecond);
+
 ADD_CASES(TC_ConsoleOut,
           {{".*BM_RepeatTimeUnit/repeats:3 ", MR_Not},
            {"^BM_RepeatTimeUnit/repeats:3_mean %console_us_report$"},
            {"^BM_RepeatTimeUnit/repeats:3_median %console_us_report$"},
-           {"^BM_RepeatTimeUnit/repeats:3_stddev %console_us_report$"}});
+           {"^BM_RepeatTimeUnit/repeats:3_stddev %console_us_report$"},
+          {"^BM_RepeatTimeUnit %console_ps_report$"}});
 ADD_CASES(TC_JSONOut,
           {{".*BM_RepeatTimeUnit/repeats:3 ", MR_Not},
            {"\"name\": \"BM_RepeatTimeUnit/repeats:3_mean\",$"},
@@ -454,7 +458,8 @@ ADD_CASES(TC_CSVOut,
           {{".*BM_RepeatTimeUnit/repeats:3 ", MR_Not},
            {"^\"BM_RepeatTimeUnit/repeats:3_mean\",%csv_us_report$"},
            {"^\"BM_RepeatTimeUnit/repeats:3_median\",%csv_us_report$"},
-           {"^\"BM_RepeatTimeUnit/repeats:3_stddev\",%csv_us_report$"}});
+           {"^\"BM_RepeatTimeUnit/repeats:3_stddev\",%csv_us_report$"},
+           {"^\"BM_RepeatTimeUnit\",%csv_ps_report$"}});
 
 // ========================================================================= //
 // -------------------- Testing user-provided statistics ------------------- //
